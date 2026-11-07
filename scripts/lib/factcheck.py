@@ -1,17 +1,23 @@
-"""Fact-check pass: deterministic checks + an independent model re-verifying every claim.
+"""Fact-check pass: deterministic checks + an independent re-verification of every claim.
+
+No model is called from here. The independent check is done by the harness (Claude Code / OpenCode /
+Codex), ideally in a fresh subagent that never saw the research extraction:
+  `verify --prepare`  writes factcheck/claims.json — claims to check, grouped by source, WITHOUT the
+                      extractor's quotes
+  checker agent       follows prompts/factcheck-verify.md, writes factcheck/verdicts*.json
+  `verify`            applies everything below and writes facts.verified.json + report.md
 
 Per claim (one fact from one source):
   1. source exists and is about the same product
-  2. the extractor's quote really occurs in the saved source text (exact or ≥90% fuzzy)
+  2. the extractor's quote really occurs in the saved source text (exact or >=90% fuzzy)
   3. the value really occurs inside that quote (numbers matched numerically)
-  4. the FACTCHECK model — shown the source but NOT the extractor's quote — must independently
-     answer supported / contradicted / not_found and give its own evidence quote,
-     and that evidence quote must also occur in the source.
+  4. the independent checker must answer supported / contradicted / not_found / ambiguous with its own
+     evidence quote, and that evidence quote must also occur in the source.
 
 Per fact (key + variant) across sources:
   verified      all surviving claims agree AND (an authoritative source — client / manufacturer /
-                gs1 — supports it, OR ≥2 independent domains agree)
-  needs_review  supported by a single secondary source only, or the model pass was skipped
+                gs1 — supports it, OR >=2 independent domains agree)
+  needs_review  supported by a single secondary source only, or the independent check was skipped
   conflict      surviving claims disagree and no client value settles it
   rejected      no claim survived the checks
 Human overrides (studio.py override) always win and are marked basis="human override".
@@ -19,12 +25,12 @@ Human overrides (studio.py override) always win and are marked basis="human over
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import re
-import sys
 import urllib.parse
 
-from . import models, paths, sources
+from . import paths, sources
 from .paths import Product, die
 
 TOLERANCE = 0.02  # relative tolerance when comparing converted numeric values
@@ -188,68 +194,21 @@ def domain(url: str | None, sid: str) -> str:
     return urllib.parse.urlparse(url).netloc.lower().removeprefix("www.") or sid
 
 
-# ── model pass ───────────────────────────────────────────────────────────────
+# ── independent check (done by the harness agent) ────────────────────────────
 
-def _excerpt(lines: list[str], idxs: list[int], limit: int = 20000) -> str:
-    text = "\n".join(lines)
-    if len(text) <= limit:
-        return text
-    keep: set[int] = set()
-    for i in idxs:
-        if i >= 0:
-            keep.update(range(max(0, i - 15), min(len(lines), i + 16)))
-    if not keep:
-        return text[:limit]
-    out, last = [], -2
-    for i in sorted(keep):
-        if i != last + 1:
-            out.append("[...]")
-        out.append(lines[i])
-        last = i
-    return "\n".join(out)[:limit]
+def _draft_sha(prod: Product) -> str:
+    return hashlib.sha256((prod.work / "research" / "facts.draft.json").read_bytes()).hexdigest()
 
 
-def model_verify(prod: Product, claims_by_source: dict, src_lines: dict, idx: dict) -> dict:
-    system = (paths.PROMPTS / "factcheck-verify.md").read_text(encoding="utf-8")
-    _, _, model = models.role_config("factcheck")
-    identity = (prod.work / "intake.md").read_text(encoding="utf-8")[:3000] if (prod.work / "intake.md").exists() else prod.id
-    verdicts: dict[str, dict] = {}
-    for sid, claims in claims_by_source.items():
-        excerpt = _excerpt(src_lines[sid], [c["_line"] for c in claims])
-        for start in range(0, len(claims), 25):
-            batch = claims[start : start + 25]
-            payload = [{k: c.get(k) for k in ("id", "key", "label", "value", "unit", "variant")} for c in batch]
-            print(f"[factcheck] {sid}: {len(batch)} claims → {model}", file=sys.stderr)
-            user = (
-                f"PRODUCT\n{identity}\n\nSOURCE {sid} — tier: {idx[sid]['tier']}; url: {idx[sid].get('url') or '-'}\n"
-                f"<<<SOURCE\n{excerpt}\nSOURCE>>>\n\nCLAIMS\n{json.dumps(payload, ensure_ascii=False, indent=1)}\n\n"
-                "Return the JSON object only."
-            )
-            data = models.parse_json(models.chat("factcheck", system, user, json_mode=True, temperature=0))
-            for v in data.get("verdicts", []):
-                if isinstance(v, dict) and v.get("id"):
-                    verdicts[str(v["id"])] = v
-    return verdicts
-
-
-# ── main ─────────────────────────────────────────────────────────────────────
-
-def verify(prod: Product, use_model: bool = True, require: list[str] | None = None) -> dict:
-    draft = paths.read_json(prod.work / "research" / "facts.draft.json")
-    if not draft:
-        die("no research/facts.draft.json — run `extract` first.")
-    idx = {s["id"]: s for s in sources.load_index(prod)}
-    src_lines = {sid: [l for l in sources.source_text(prod, sid).splitlines() if l.strip()] for sid in idx}
+def _checks(prod: Product, draft: dict, idx: dict, src_lines: dict) -> list[dict]:
     src_meta = draft.get("sources", {})
-
     claims = []
     for f in draft["facts"]:
         c = dict(f)
         sid = c["source_id"]
         checks = {"source_exists": sid in idx}
         if checks["source_exists"]:
-            match = src_meta.get(sid, {}).get("same_product", "unclear")
-            checks["same_product"] = match
+            checks["same_product"] = src_meta.get(sid, {}).get("same_product", "unclear")
             cov, line = locate(c.get("quote", ""), src_lines[sid])
             checks["quote_coverage"] = round(cov, 3)
             checks["quote_found"] = cov >= 0.9
@@ -261,15 +220,83 @@ def verify(prod: Product, use_model: bool = True, require: list[str] | None = No
             and checks.get("quote_found") and checks.get("value_in_quote")
         )
         claims.append(c)
+    return claims
 
-    model_name = None
-    if use_model:
-        _, _, model_name = models.role_config("factcheck")
-        by_src: dict[str, list] = {}
-        for c in claims:
-            if c["det_ok"]:
-                by_src.setdefault(c["source_id"], []).append(c)
-        verdicts = model_verify(prod, by_src, src_lines, idx)
+
+def _load(prod: Product):
+    draft = paths.read_json(prod.work / "research" / "facts.draft.json")
+    if not draft:
+        die("no research/facts.draft.json — run `extract` first.")
+    idx = {s["id"]: s for s in sources.load_index(prod)}
+    src_lines = {sid: [l for l in sources.source_text(prod, sid).splitlines() if l.strip()] for sid in idx}
+    return draft, idx, src_lines
+
+
+def prepare(prod: Product) -> dict:
+    """Write factcheck/claims.json: every claim that passed the deterministic checks, without quotes."""
+    draft, idx, src_lines = _load(prod)
+    claims = _checks(prod, draft, idx, src_lines)
+    by_src: dict[str, list] = {}
+    for c in claims:
+        if c["det_ok"]:
+            by_src.setdefault(c["source_id"], []).append({k: c.get(k) for k in ("id", "key", "label", "value", "unit", "variant")})
+    out = {
+        "product_id": prod.id,
+        "prepared_at": paths.now(),
+        "draft_sha256": _draft_sha(prod),
+        "instructions": "prompts/factcheck-verify.md",
+        "verdicts_file": paths.rel(prod.work / "factcheck" / "verdicts.json"),
+        "sources": [
+            {"source_id": sid, "tier": idx[sid]["tier"], "url": idx[sid].get("url"),
+             "source_file": paths.rel(sources.src_dir(prod) / f"{sid}.txt"), "claims": cl}
+            for sid, cl in by_src.items()
+        ],
+        "failed_deterministic": [c["id"] for c in claims if not c["det_ok"]],
+    }
+    paths.write_json(prod.work / "factcheck" / "claims.json", out)
+    return out
+
+
+def load_verdicts(prod: Product) -> tuple[dict[str, dict], list[str]]:
+    """Read every factcheck/verdicts*.json the checker wrote. Returns (verdicts by claim id, checker names)."""
+    fc = prod.work / "factcheck"
+    prepared = paths.read_json(fc / "claims.json")
+    if not prepared:
+        die("no factcheck/claims.json — run `verify --prepare`, have the independent checker write "
+            "factcheck/verdicts.json, then run `verify` again.")
+    if prepared.get("draft_sha256") != _draft_sha(prod):
+        die("research/facts.draft.json changed since `verify --prepare` — run it again and re-check the claims.")
+    verdicts: dict[str, dict] = {}
+    checkers: set[str] = set()
+    for f in sorted(fc.glob("verdicts*.json")):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            die(f"{paths.rel(f)} is not valid JSON: {e}")
+        if isinstance(data, list):
+            data = {"verdicts": data}
+        checkers.add(str(data.get("checked_by") or "harness agent"))
+        for v in data.get("verdicts", []):
+            if isinstance(v, dict) and v.get("id"):
+                verdicts[str(v["id"])] = v
+    wanted = [c["id"] for s in prepared["sources"] for c in s["claims"]]
+    missing = [i for i in wanted if i not in verdicts]
+    if missing:
+        die(f"no verdict yet for {len(missing)} claim(s): {', '.join(missing[:30])}"
+            f"{' ...' if len(missing) > 30 else ''}. Check them (see factcheck/claims.json) or run with --deterministic-only.")
+    return verdicts, sorted(checkers)
+
+
+# ── main ─────────────────────────────────────────────────────────────────────
+
+def verify(prod: Product, independent: bool = True, require: list[str] | None = None) -> dict:
+    draft, idx, src_lines = _load(prod)
+    claims = _checks(prod, draft, idx, src_lines)
+
+    checker = None
+    if independent:
+        verdicts, checkers = load_verdicts(prod)
+        checker = ", ".join(checkers)
         for c in claims:
             if not c["det_ok"]:
                 continue
@@ -279,11 +306,11 @@ def verify(prod: Product, use_model: bool = True, require: list[str] | None = No
             ev_cov, _ = locate(ev, src_lines[c["source_id"]]) if ev else (0.0, -1)
             if verdict == "supported" and ev_cov < 0.9:
                 verdict = "evidence_not_in_source"
-            c["model"] = {"verdict": verdict, "evidence": ev, "evidence_coverage": round(ev_cov, 3),
+            c["checker"] = {"verdict": verdict, "evidence": ev, "evidence_coverage": round(ev_cov, 3),
                           "correct_value": v.get("correct_value"), "note": v.get("note")}
 
     def survives(c) -> bool:
-        return c["det_ok"] and (not use_model or c.get("model", {}).get("verdict") == "supported")
+        return c["det_ok"] and (not independent or c.get("checker", {}).get("verdict") == "supported")
 
     def eff_tier(c) -> str:
         tier = idx[c["source_id"]]["tier"]
@@ -331,8 +358,8 @@ def verify(prod: Product, use_model: bool = True, require: list[str] | None = No
         rep = sorted(chosen, key=lambda c: sources.TIERS.index(eff_tier(c)))[0]
         if "client" in tiers:
             status, basis = "verified", "client-approved brief"
-        elif not use_model:
-            status, basis = "needs_review", "model fact-check skipped (--no-model)"
+        elif not independent:
+            status, basis = "needs_review", "independent check skipped (--deterministic-only)"
         elif tiers & sources.AUTHORITATIVE:
             status, basis = "verified", f"authoritative source ({', '.join(sorted(tiers & sources.AUTHORITATIVE))})"
         elif len(domains) >= 2:
@@ -350,9 +377,9 @@ def verify(prod: Product, use_model: bool = True, require: list[str] | None = No
     out = {
         "product_id": prod.id,
         "generated_at": paths.now(),
-        "research_model": draft.get("model"),
-        "factcheck_model": model_name,
-        "model_pass": use_model,
+        "extracted_by": draft.get("extracted_by"),
+        "checked_by": checker,
+        "independent_check": independent,
         "summary": {s: sum(f["status"] == s for f in facts) for s in ("verified", "needs_review", "conflict", "rejected")},
         "missing_required": missing,
         "facts": sorted(facts, key=lambda f: (["verified", "needs_review", "conflict", "rejected"].index(f["status"]), f["key"])),
@@ -360,7 +387,7 @@ def verify(prod: Product, use_model: bool = True, require: list[str] | None = No
     }
     paths.write_json(prod.work / "factcheck" / "facts.verified.json", out)
     (prod.work / "factcheck" / "report.md").write_text(report_md(out), encoding="utf-8")
-    paths.record(prod, "factcheck", **out["summary"], missing_required=len(missing), model_pass=use_model)
+    paths.record(prod, "factcheck", **out["summary"], missing_required=len(missing), independent_check=independent)
     return out
 
 
@@ -369,7 +396,7 @@ def _claim_out(c: dict, idx: dict) -> dict:
     return {
         "claim_id": c["id"], "key": c["key"], "value": c["value"], "unit": c.get("unit"), "variant": c.get("variant"),
         "source_id": c["source_id"], "tier": s.get("tier"), "url": s.get("url"), "quote": c.get("quote"),
-        "checks": c["checks"], "model": c.get("model"),
+        "checks": c["checks"], "checker": c.get("checker"),
     }
 
 
@@ -431,8 +458,8 @@ def report_md(out: dict) -> str:
     lines = [
         f"# Fact-check report — {out['product_id']}",
         "",
-        f"Generated {out['generated_at']} · research model `{out['research_model']}` · "
-        f"fact-check model `{out['factcheck_model'] or 'skipped'}`",
+        f"Generated {out['generated_at']} · extracted by `{out['extracted_by'] or '-'}` · "
+        f"independently checked by `{out['checked_by'] or 'skipped'}`",
         "",
         f"**{s['verified']} verified · {s['needs_review']} need review · {s['conflict']} conflicts · {s['rejected']} rejected**",
         "",
@@ -455,8 +482,8 @@ def report_md(out: dict) -> str:
             why = [k for k in ("quote_found", "value_in_quote") if c["checks"].get(k) is False]
             if c["checks"].get("same_product") == "no":
                 why.append("different product")
-            if c.get("model"):
-                why.append(f"model: {c['model']['verdict']}")
+            if c.get("checker"):
+                why.append(f"checker: {c['checker']['verdict']}")
             lines.append(f"| {c['claim_id']} | {c['key']} | {c['value']} {c.get('unit') or ''} | {c['source_id']} | {', '.join(why) or '-'} |")
     lines += ["", "Resolve items with `studio.py override` (human decision) or add better sources and re-run.", ""]
     return "\n".join(lines)

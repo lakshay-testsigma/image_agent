@@ -9,8 +9,8 @@
 
 ## Shot: <shot-name>   (e.g. catalog-white, lifestyle-loft, detail-grain, story-callout)
 - **Purpose / channel:** e.g. Shopify main image / PDP gallery / Instagram 4:5 / Amazon secondary
-- **Size & params:** `--size 1024x1024 --quality high --n 2` (+ `--background transparent` if a cut-out is wanted)
-- **References sent:** all product photos | `--only-primary` | `--with-style-refs` | `--ref assets/<p>/refs/mood.jpg`
+- **Size & variations:** e.g. 1024x1024 square, 2 variations (+ transparent background if a cut-out is wanted)
+- **References attached:** all product photos | `--only-primary` | `--with-style-refs` | `--ref assets/<p>/refs/mood.jpg` (flags for `studio.py refs` / `register`)
 - **Concept:** one or two sentences
 - **Set / environment:**
 - **Lighting:**

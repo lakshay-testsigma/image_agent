@@ -1,9 +1,9 @@
-# Writing gpt-image prompts that keep the real product
+# Writing image prompts that keep the real product
 
-The render stage sends the product photos as reference images (edit mode, `input_fidelity=high`) along with your prompt file. The model works best with plain, concrete language in roughly this order.
+The render stage passes the product photos to your harness's image tool as reference images, together with your prompt file. Image models work best with plain, concrete language in roughly this order.
 
 ## 1. Say what each image is for
-Images are sent in this order: the primary product photo, the other product photos, then extra `--ref` files, then `refs/` (if `--with-style-refs`).
+Images are attached in the order `studio.py refs` prints: the primary product photo, the other product photos, then extra `--ref` files, then `refs/` (if `--with-style-refs`).
 
 > Image 1–3 show the exact product: a solid white-oak lounge chair with a woven paper-cord seat. Image 4 is a mood reference — borrow only its warm late-afternoon light and muted palette, not its objects.
 
@@ -32,15 +32,15 @@ Only use `verified` values here.
 
 Specs and copy go on later through `product-overlay`.
 
-## Size / quality cheat-sheet (gpt-image-1)
-- `1024x1024` square catalog/social · `1536x1024` landscape banner/lifestyle · `1024x1536` portrait/story/4:5 crop · `auto`
-- `--quality high` for finals, `medium`/`low` for fast concept exploration
-- `--background transparent` (png/webp) for cut-outs on transparent background
-- `--n 2..4` to get variations to choose from (each costs)
-- `--mode generate` (no product refs) only for empty background plates or abstract concepts. It doesn't preserve the product.
+## Size / variations cheat-sheet
+- Square (1:1) for catalog/social · landscape (3:2) for banners/lifestyle · portrait (2:3) for stories/4:5 crops. Use the closest size your image tool supports.
+- Full quality for finals; lower quality/size for fast concept exploration, if the tool offers it.
+- Transparent background (png/webp) for cut-outs, if the tool supports it.
+- 2–4 variations give you a choice.
+- Text-to-image without product references only for empty background plates or abstract concepts. It doesn't preserve the product.
 
 ## Iterating
 - Change one thing per retry and keep a note of what changed in the shot plan.
-- If the label or logo keeps drifting, try `--only-primary` with the clearest label photo, move the camera so the label is smaller or angled, or plan a composite.
+- If the label or logo keeps drifting, attach only the clearest label photo (`--only-primary`), move the camera so the label is smaller or angled, or plan a composite.
 - If colours shift, name the exact colour ("deep forest green, approx #1F3D2B, matte") and reduce coloured light.
 - Keep prompts under roughly 250 words. Past that, extra detail starts to compete with itself.

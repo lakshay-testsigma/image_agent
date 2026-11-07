@@ -6,7 +6,7 @@ argument-hint: <product-image-path>
 
 # Product intake
 
-**Product:** `$ARGUMENTS` (first token = product image path or folder; ask for it if missing).
+**Product:** `$ARGUMENTS` (first token = product image path or folder). If you see the literal text `$ARGUMENTS`, take the path from the user's message; ask for it if missing.
 
 ## Steps
 
@@ -19,11 +19,7 @@ argument-hint: <product-image-path>
 2. **Read the brief** (`assets/<product>/brief.md`) and the brand profile it points to (if any). The brief is the user's intent: note the creative direction, shots wanted, must-keep, must-avoid, approved copy, and which facts matter.
    - If there's no brief or no creative direction, say so. In an interactive session, ask the user, or offer to draft one from the photos. Don't silently invent a direction.
 
-3. **Study every product photo** (open them, they're images). If `VISION_MODEL` is set you can get a second opinion:
-   ```bash
-   uv run scripts/studio.py ask --role vision --image <photo> --prompt-file <your-question.md>
-   ```
-   Record what you can actually see. Don't guess what you can't.
+3. **Study every product photo** — open each image file with your file-reading tool and look at it yourself. For a second opinion, you can hand the photos to a subagent (Claude Code: Agent tool; OpenCode: `task` tool) and ask it to list what it sees. Record what you can actually see. Don't guess what you can't.
 
 4. **Write `output/<id>/intake.md`** in this shape (add sections freely):
 
@@ -47,13 +43,14 @@ argument-hint: <product-image-path>
 
    The preservation checklist is used later by QA, so make it concrete.
 
-5. Log completion:
+5. Check progress:
    ```bash
    uv run scripts/studio.py status <product-path>
    ```
-   (`intake.md` counts as intake done.)
+   (`intake.md` existing counts as intake done.)
 
 ## Notes
 
 - Visible text and observations are *hints*, not verified facts. Only the fact-check stage produces facts.
-- Photo quality problems (low res, harsh glare, cropped product) are worth telling the user about now, since every render inherits them.
+- Tell the user about photo quality problems (low res, harsh glare, cropped product) now, since every render inherits them.
+- If the product folder has no product photo (only `refs/`), stop and ask: files in `refs/` are style references, never the product.

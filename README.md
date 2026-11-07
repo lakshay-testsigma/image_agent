@@ -2,37 +2,29 @@
 
 Agent workflow that takes **one product photo** and turns it into:
 1. researched product details, every one traced to a saved source,
-2. an independent fact-check by a second model (DeepSeek / Qwen / any open model),
-3. product photography and mockups from OpenAI `gpt-image`, using the real photo as reference so the product stays identical,
+2. an independent fact-check by a fresh subagent that never saw the extraction,
+3. product photography and mockups made by your harness's image tool, using the real photo as reference so the product stays identical,
 4. deterministic spec callouts and copy (only verified facts and approved text),
 5. three-gate QA and an export package with a full audit trail.
 
-The skills run in **Claude Code** (`.claude/skills/`) and **Codex** (`.agents/skills` → same folder).
+**No API keys, no `.env`.** Everything model-shaped (research, fact-check, looking at images, image generation) is done by the CLI harness you run the skills in: **Claude Code**, **OpenCode** or **Codex**. The Python scripts only save, validate and log.
 
 ```
 product photo ─► intake ─► research ─► fact-check ─► creative plan ─► render ─► overlay ─► QA ─► export
-                 (agent)   (RESEARCH   (FACTCHECK     (agent, your     (OpenAI    (Pillow)  (agent +  (final/ +
-                           model)      model)         direction)       gpt-image)            vision)   listing.json)
+                 (agent)   (agent:     (subagent:     (agent, your     (harness   (Pillow)  (agent)  (final/ +
+                           web +       independent    direction)       image                       listing.json)
+                           extract)    check)                          tool)
 ```
 
 ## Setup
 
 ```bash
-uv sync                       # installs openai, pillow, python-dotenv, pypdf into .venv
-cp .env.example .env          # then fill in keys
+uv sync     # installs pillow + pypdf into .venv — that's all
 ```
 
-`.env` roles (all OpenAI-compatible, so you can mix providers):
-
-| Role | Example | Needed for |
-|---|---|---|
-| `RESEARCH_*` | DeepSeek `deepseek-chat` | extracting facts from sources |
-| `FACTCHECK_*` | DeepSeek `deepseek-reasoner`, or Ollama `qwen2.5:14b` locally | independent verification |
-| `VISION_*` (optional) | Ollama `qwen2.5vl:7b` | second opinion on photos and renders |
-| `OPENAI_API_KEY`, `IMAGE_*` | `gpt-image-1` | rendering |
-| `SEARCH_PROVIDER` (optional) | tavily / brave / searxng | the agent can use its own web search instead |
-
-Fully local research and fact-check: run Ollama and point both roles at `http://localhost:11434/v1` with `API_KEY=ollama`. A different model per role is best.
+Image generation needs an image tool in your harness that accepts reference images:
+- **Codex:** built-in `image_gen` works out of the box.
+- **Claude Code / OpenCode:** connect an image-generation MCP server. Without one, stages 1–4 still run and the agent stops before rendering.
 
 ## Add a product
 
@@ -46,29 +38,33 @@ Optional shared house style per client: copy `brands/_template.md` → `brands/<
 
 ## Run it (one product per session)
 
-Claude Code:
+Claude Code (skills in `.claude/skills/`):
 ```
 /product-studio assets/001-oak-chair/01-front.jpg
 /product-studio assets/001-oak-chair/01-front.jpg moody dark editorial, 3 shots, autopilot
 ```
-Codex:
+OpenCode (reads `.claude/skills/` natively; slash commands in `.opencode/commands/`):
+```
+/product-studio assets/001-oak-chair/01-front.jpg
+```
+Codex (`.agents/skills` → same folder):
 ```
 Use the product-studio skill on assets/001-oak-chair/01-front.jpg
 ```
-Or run single stages, each taking the same path:
+Every stage is also its own skill / command, taking the same path:
 
 | Skill | Does |
 |---|---|
 | `product-intake` | workspace, brief, photo analysis, preservation checklist |
-| `product-research` | find and save sources, research model extracts facts with quotes |
-| `product-factcheck` | fact-check model + deterministic checks, conflicts, human overrides |
+| `product-research` | agent finds + saves sources, extracts facts with verbatim quotes |
+| `product-factcheck` | deterministic checks + independent subagent check, conflicts, human overrides |
 | `product-creative` | your direction → shot plan → one prompt per shot |
-| `product-render` | OpenAI gpt-image edit renders (or Codex built-in image_gen + `register`) |
+| `product-render` | harness image tool with product photos as references, logged with `register` |
 | `product-overlay` | text, spec callouts and logos drawn deterministically |
 | `product-qa` | factual / visual / creative gates per image |
 | `product-export` | `final/` images + `listing.json` (verified facts only) |
 
-The agent pauses for your OK when the brief is missing direction, when facts conflict, before spending on renders, and before export. Say "autopilot" to skip the pauses.
+The agent pauses for your OK when the brief is missing direction, when facts conflict, before generating images, and before export. Say "autopilot" to skip the pauses.
 
 ## Where things go
 
@@ -78,10 +74,10 @@ output/<product-id>/
 ├── brief.snapshot.md        brief as it was when the run started
 ├── intake.md                identity, visible text, preservation checklist
 ├── sources/                 S0 (client brief facts), S1.. saved evidence + index.json
-├── research/                per-source extractions + facts.draft.json
-├── factcheck/               facts.verified.json, report.md, overrides.json
+├── research/                input-<S>.json (agent extraction), extract-<S>.json, facts.draft.json
+├── factcheck/               claims.json, verdicts-<S>.json, facts.verified.json, report.md, overrides.json
 ├── creative/                shot-plan.md, prompts/<shot>.md, overlays/<shot>.json
-├── renders/<shot>/          vN-i.png + vN.json (prompt, model, params, refs)
+├── renders/<shot>/          vN-i.png + vN.json (prompt, engine, model, refs)
 ├── qa/                      qa.json, qa-report.md, contact-sheet.png
 └── final/                   approved images + listing.json (+ description.md)
 ```
@@ -89,10 +85,10 @@ output/<product-id>/
 ## Customising
 
 - **Creative freedom:** nothing in the scripts picks a style. Direction comes from you (session > brief > brand profile). `product-creative/style-inspiration.md` is an optional idea library.
-- **Research and fact-check behaviour:** edit `prompts/research-extract.md` and `prompts/factcheck-verify.md`.
+- **Extraction and fact-check rules:** edit `prompts/research-extract.md` and `prompts/factcheck-verify.md`.
 - **Verification policy** (tiers, tolerance, what counts as verified): `scripts/lib/factcheck.py`.
 - **Fonts for overlays:** drop `.ttf`/`.otf` files in `fonts/` and reference them by name.
 
 ## CLI reference
 
-`uv run scripts/studio.py -h`. Commands: `init status search fetch add-source sources extract verify override facts ask render register overlay inspect contact-sheet qa-mark export`.
+`uv run scripts/studio.py -h`. Commands: `init status fetch add-source sources extract verify override facts refs register overlay inspect contact-sheet qa-mark export`.

@@ -1,6 +1,6 @@
 # QA report — <product_id>
 
-Reviewed: <date> · Reviewer: <agent model> (+ vision model <name> if used)
+Reviewed: <date> · Reviewer: <agent model> (+ second-opinion subagent if used)
 Brief direction: <one line>
 Preservation checklist used: intake.md
 

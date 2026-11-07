@@ -1,12 +1,10 @@
 [project]
 name = "product-studio"
 version = "0.1.0"
-description = "Agent-driven product research, fact-checking and AI product photography — one product at a time."
+description = "Agent-driven product research, fact-checking and AI product photography — one product at a time. No API keys: the harness does the model work."
 requires-python = ">=3.10"
 dependencies = [
-    "openai>=1.99",
     "pillow>=10.3",
-    "python-dotenv>=1.0",
     "pypdf>=4.0",
 ]
 

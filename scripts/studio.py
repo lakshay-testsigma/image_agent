@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Product Studio CLI — deterministic plumbing for the agent skills. ONE product per call.
 
+No API keys, no .env, no model calls: the harness (Claude Code / OpenCode / Codex) does the research,
+the independent fact-check and the image generation. These commands save, validate and log its work.
+
 Every product command takes the product image path (or its folder) as the first argument:
     uv run scripts/studio.py init assets/001-oak-chair/01-front.jpg
 
@@ -15,12 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dotenv import load_dotenv  # noqa: E402
-
 from lib import paths  # noqa: E402
 from lib.paths import die  # noqa: E402
-
-load_dotenv(paths.ROOT / ".env")
 
 
 def out(data) -> None:
@@ -95,18 +94,6 @@ def cmd_status(a):
     })
 
 
-def cmd_search(a):
-    from lib import sources
-
-    prod = paths.resolve(a.product)
-    results = sources.search(a.query, a.n)
-    log = prod.work / "sources" / "searches.json"
-    hist = paths.read_json(log, [])
-    hist.append({"query": a.query, "at": paths.now(), "results": results})
-    paths.write_json(log, hist)
-    out(results)
-
-
 def cmd_fetch(a):
     from lib import sources
 
@@ -139,16 +126,33 @@ def cmd_extract(a):
     from lib import research
 
     prod = paths.resolve(a.product)
-    draft = research.extract(prod, only=a.source, force=a.force)
-    out({"facts": len(draft["facts"]), "sources": draft["sources"], "file": paths.rel(prod.work / "research/facts.draft.json")})
+    stored = None
+    if a.input:
+        if not a.source or len(a.source) != 1:
+            die("--input needs exactly one --source (the source the extraction was made from)")
+        r = research.store(prod, a.source[0], research.load_input(a.input), a.by)
+        stored = {"source": r["source_id"], "facts": len(r["facts"]), "dropped_invalid": r["dropped"]}
+    draft = research.merge(prod)
+    out({"stored": stored, "facts": len(draft["facts"]), "sources": draft["sources"],
+         "pending_sources": draft["pending_sources"], "stale_sources": draft["stale_sources"],
+         "file": paths.rel(prod.work / "research/facts.draft.json")})
 
 
 def cmd_verify(a):
     from lib import factcheck
 
     prod = paths.resolve(a.product)
+    if a.prepare:
+        res = factcheck.prepare(prod)
+        out({"claims_file": paths.rel(prod.work / "factcheck/claims.json"),
+             "claims_to_check": sum(len(s["claims"]) for s in res["sources"]),
+             "by_source": {s["source_id"]: len(s["claims"]) for s in res["sources"]},
+             "failed_deterministic": res["failed_deterministic"],
+             "next": "independent checker follows prompts/factcheck-verify.md and writes factcheck/verdicts.json "
+                     "(or verdicts-<source>.json per source); then run `verify` without --prepare"})
+        return
     require = [k.strip() for k in (a.require or "").split(",") if k.strip()]
-    res = factcheck.verify(prod, use_model=not a.no_model, require=require)
+    res = factcheck.verify(prod, independent=not a.deterministic_only, require=require)
     out({"summary": res["summary"], "missing_required": res["missing_required"],
          "report": paths.rel(prod.work / "factcheck/report.md"), "file": paths.rel(prod.work / "factcheck/facts.verified.json")})
 
@@ -173,44 +177,28 @@ def cmd_facts(a):
           "status": f["status"], "basis": f["basis"]} for f in rows])
 
 
-def cmd_ask(a):
-    from lib import models
+def _refs(prod, a):
+    from lib import renders
 
-    system = paths.p(a.system_file).read_text(encoding="utf-8") if a.system_file else (a.system or "You are a precise assistant.")
-    prompt = read_arg_text(a.prompt, a.prompt_file, "prompt")
-    imgs = [paths.p(i) for i in (a.image or [])]
-    reply = models.chat(a.role, system, prompt, json_mode=a.json, images=imgs or None, temperature=a.temperature)
-    if a.save:
-        paths.p(a.save).parent.mkdir(parents=True, exist_ok=True)
-        paths.p(a.save).write_text(reply, encoding="utf-8")
-    print(json.dumps(models.parse_json(reply), indent=2, ensure_ascii=False) if a.json else reply)
+    return renders.reference_images(prod, only_primary=a.only_primary, no_product_refs=a.no_product_refs,
+                                    extra=a.ref, with_style_refs=a.with_style_refs)
 
 
-def cmd_render(a):
-    from lib import imagegen
-
+def cmd_refs(a):
     prod = paths.resolve(a.product)
-    prompt = read_arg_text(a.prompt, a.prompt_file, "prompt")
-    refs = [] if a.no_product_refs else list(prod.images)
-    if a.only_primary:
-        refs = [prod.primary_image]
-    refs += [paths.p(r) for r in (a.ref or [])]
-    if a.with_style_refs:
-        refs += prod.style_refs
-    meta = imagegen.render(
-        prod, a.shot, prompt, refs, mode=a.mode, size=a.size, quality=a.quality, n=a.n, background=a.background,
-        output_format=a.format, fidelity=a.fidelity, mask=paths.p(a.mask) if a.mask else None, model=a.model, dry_run=a.dry_run,
-    )
-    out(meta)
+    refs = _refs(prod, a)
+    out({"reference_images": [str(r) for r in refs], "relative": [paths.rel(r) for r in refs],
+         "note": "attach in this order; the prompt must say what each image is"})
 
 
 def cmd_register(a):
-    from lib import imagegen
+    from lib import renders
 
     prod = paths.resolve(a.product)
     prompt = read_arg_text(a.prompt, a.prompt_file, "prompt")
-    refs = [paths.p(r) for r in (a.ref or [])] or list(prod.images)
-    out(imagegen.register(prod, a.shot, paths.p(a.image), prompt, a.engine, refs, a.model))
+    params = {k: v for k, v in (("size", a.size), ("quality", a.quality), ("background", a.background)) if v}
+    out(renders.register(prod, a.shot, [paths.p(i) for i in a.image], prompt, a.engine, _refs(prod, a),
+                         a.model, params, a.notes))
 
 
 def cmd_overlay(a):
@@ -274,11 +262,6 @@ def main(argv=None):
     s = cmd("status", cmd_status, "show what is done for this product and what comes next")
     s.add_argument("product", help=P)
 
-    s = cmd("search", cmd_search, "web search via SEARCH_PROVIDER (optional — agents may use their own search)")
-    s.add_argument("product", help=P)
-    s.add_argument("query")
-    s.add_argument("--n", type=int, default=8)
-
     tiers = ["client", "manufacturer", "gs1", "distributor", "retailer", "other"]
     s = cmd("fetch", cmd_fetch, "download a URL (HTML/PDF), convert to text, save as evidence")
     s.add_argument("product", help=P)
@@ -301,15 +284,18 @@ def main(argv=None):
     s = cmd("sources", cmd_sources, "list saved evidence")
     s.add_argument("product", help=P)
 
-    s = cmd("extract", cmd_extract, "RESEARCH model: extract facts + verbatim quotes from every saved source")
+    s = cmd("extract", cmd_extract, "store the agent's fact extraction for a source, then merge all into facts.draft.json")
     s.add_argument("product", help=P)
-    s.add_argument("--source", action="append", help="only (re)extract this source id; repeatable")
-    s.add_argument("--force", action="store_true", help="ignore cache")
+    s.add_argument("--source", action="append", help="source id the --input extraction belongs to, e.g. S1")
+    s.add_argument("--input", help="JSON extraction written by the agent (format: prompts/research-extract.md)")
+    s.add_argument("--by", help="who extracted, e.g. 'claude-opus-5-5 (Claude Code)'")
 
-    s = cmd("verify", cmd_verify, "FACTCHECK model + deterministic checks → facts.verified.json + report.md")
+    s = cmd("verify", cmd_verify, "deterministic checks + independent checker verdicts -> facts.verified.json + report.md")
     s.add_argument("product", help=P)
+    s.add_argument("--prepare", action="store_true", help="write factcheck/claims.json (claims without quotes) for the checker")
     s.add_argument("--require", help="comma-separated fact keys that must end up verified, e.g. height,width,weight")
-    s.add_argument("--no-model", action="store_true", help="deterministic checks only (nothing above needs_review except client facts)")
+    s.add_argument("--deterministic-only", action="store_true",
+                   help="skip the independent check (nothing above needs_review except client facts)")
 
     s = cmd("override", cmd_override, "record a HUMAN decision for a fact (set value or reject); re-run verify after")
     s.add_argument("product", help=P)
@@ -325,46 +311,29 @@ def main(argv=None):
     s.add_argument("product", help=P)
     s.add_argument("--all", action="store_true", help="include needs_review / conflict / rejected")
 
-    s = cmd("ask", cmd_ask, "free-form call to a configured model role (research | factcheck | vision)")
-    s.add_argument("--role", required=True, choices=["research", "factcheck", "vision"])
-    s.add_argument("--prompt")
-    s.add_argument("--prompt-file")
-    s.add_argument("--system")
-    s.add_argument("--system-file")
-    s.add_argument("--image", action="append", help="attach image (vision role); repeatable")
-    s.add_argument("--json", action="store_true", help="request + parse a JSON object")
-    s.add_argument("--temperature", type=float)
-    s.add_argument("--save", help="also write the raw reply to this file")
+    def ref_flags(s):
+        s.add_argument("--ref", action="append", help="extra reference image (style, model, logo); repeatable")
+        s.add_argument("--with-style-refs", action="store_true", help="also include every image in the product's refs/ folder")
+        s.add_argument("--only-primary", action="store_true", help="only the primary product image, not all angles")
+        s.add_argument("--no-product-refs", action="store_true", help="no product photos (background plates / concepts only)")
 
-    s = cmd("render", cmd_render, "OpenAI gpt-image: render one shot from an agent-written prompt")
+    s = cmd("refs", cmd_refs, "ordered reference images to attach to the harness image tool for a shot")
+    s.add_argument("product", help=P)
+    ref_flags(s)
+
+    s = cmd("register", cmd_register, "log images made by the harness image tool into renders/<shot>/ (audit trail)")
     s.add_argument("product", help=P)
     s.add_argument("--shot", required=True, help="shot name, e.g. hero, lifestyle-kitchen, detail-stitching")
+    s.add_argument("--image", action="append", required=True, help="generated image file; repeat for variations")
     s.add_argument("--prompt-file")
     s.add_argument("--prompt")
-    s.add_argument("--mode", choices=["edit", "generate"], default="edit", help="edit = keep the real product (default)")
-    s.add_argument("--ref", action="append", help="extra reference image (style, model, logo); repeatable")
-    s.add_argument("--with-style-refs", action="store_true", help="also send every image in the product's refs/ folder")
-    s.add_argument("--only-primary", action="store_true", help="send only the primary product image, not all angles")
-    s.add_argument("--no-product-refs", action="store_true")
-    s.add_argument("--size", help="1024x1024 | 1536x1024 | 1024x1536 | auto (default IMAGE_SIZE)")
-    s.add_argument("--quality", help="low | medium | high | auto (default IMAGE_QUALITY)")
-    s.add_argument("--n", type=int, default=1, help="variations per call")
-    s.add_argument("--background", choices=["transparent", "opaque", "auto"])
-    s.add_argument("--format", default="png", choices=["png", "jpeg", "webp"])
-    s.add_argument("--fidelity", help="input_fidelity: high | low ('' to omit)")
-    s.add_argument("--mask", help="PNG mask (transparent = area to change)")
-    s.add_argument("--model", help="override IMAGE_MODEL")
-    s.add_argument("--dry-run", action="store_true", help="print the request without calling the API")
-
-    s = cmd("register", cmd_register, "log an image made by another engine (e.g. Codex built-in image_gen) into the audit trail")
-    s.add_argument("product", help=P)
-    s.add_argument("--shot", required=True)
-    s.add_argument("--image", required=True)
-    s.add_argument("--prompt-file")
-    s.add_argument("--prompt")
-    s.add_argument("--engine", default="codex-imagegen")
-    s.add_argument("--model")
-    s.add_argument("--ref", action="append")
+    s.add_argument("--engine", default="harness", help="e.g. claude-code+<mcp tool>, opencode+<tool>, codex-imagegen")
+    s.add_argument("--model", help="image model the tool used, if known")
+    s.add_argument("--size")
+    s.add_argument("--quality")
+    s.add_argument("--background")
+    s.add_argument("--notes")
+    ref_flags(s)
 
     s = cmd("overlay", cmd_overlay, "draw verified facts / approved copy / logos onto an image from a JSON spec")
     s.add_argument("product", help=P)

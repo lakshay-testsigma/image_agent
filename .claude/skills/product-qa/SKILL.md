@@ -6,7 +6,7 @@ argument-hint: <product-image-path>
 
 # Product QA — three gates
 
-**Product:** `$ARGUMENTS` (first token = product image path).
+**Product:** `$ARGUMENTS` (first token = product image path; if you see the literal text `$ARGUMENTS`, take it from the user's message).
 
 Inputs: product photos, `output/<id>/intake.md` (preservation checklist), `creative/shot-plan.md`, `factcheck/facts.verified.json`, every render in `renders/`, and the `.overlay.json` sidecars.
 
@@ -17,11 +17,8 @@ uv run scripts/studio.py status <product-path>                 # list renders
 uv run scripts/studio.py contact-sheet <product-path>          # photos + renders side by side → qa/contact-sheet.png
 uv run scripts/studio.py inspect output/<id>/renders/*/*.png   # size, aspect, alpha, sharpness
 ```
-Open the contact sheet and each candidate at full size. If `VISION_MODEL` is configured, get an independent second opinion. It's useful for catching what you overlooked, but it doesn't replace your own look:
-```bash
-uv run scripts/studio.py ask --role vision --image <product-photo> --image <render> \
-  --prompt "Image 1 is the real product, image 2 a generated photo. List every difference in the product itself (shape, parts, proportions, colour, logo, label text, materials). Ignore the background." 
-```
+Open the contact sheet and each candidate at full size with your file-reading tool. For an independent second opinion, spawn a subagent (Claude Code: Agent tool; OpenCode: `task` tool) that has not seen your verdicts. It's useful for catching what you overlooked, but it doesn't replace your own look. Brief it like this:
+> Open `<product-photo>` (the real product) and `<render>` (a generated photo). List every difference in the product itself: shape, parts, proportions, colour, logo, label text letter by letter, materials. Ignore the background.
 
 ## Gate 1: Factual (`--factual pass|fail|na`)
 - Every number or claim drawn on the image traces to a **verified** fact. Check the sidecar's `facts_rendered`, and check the value matches the variant.

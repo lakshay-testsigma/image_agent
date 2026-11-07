@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageStat
 
-from . import imagegen, paths
+from . import paths, renders
 from .overlay import load_font
 from .paths import Product, die
 
@@ -92,7 +92,7 @@ def export(prod: Product, images: list[Path], description: str | None = None, fo
         overlay_meta = paths.read_json(img.with_suffix(".overlay.json"))
         if overlay_meta:
             base = paths.p(overlay_meta["base"])
-        meta = imagegen.meta_for(base) or {}
+        meta = renders.meta_for(base) or {}
         out_images.append({
             "file": paths.rel(dst),
             "source_render": paths.rel(img),

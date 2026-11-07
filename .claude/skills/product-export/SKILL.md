@@ -6,7 +6,7 @@ argument-hint: <product-image-path>
 
 # Export approved assets
 
-**Product:** `$ARGUMENTS` (first token = product image path).
+**Product:** `$ARGUMENTS` (first token = product image path; if you see the literal text `$ARGUMENTS`, take it from the user's message).
 
 ## 1. Optional: product description
 
@@ -21,7 +21,7 @@ uv run scripts/studio.py export <product-path> --image output/<id>/renders/catal
 ```
 This copies the images to `output/<id>/final/<id>-<shot>-NN.png` and writes `final/listing.json` with:
 - identity and verified facts only (unverified keys go under `excluded_unverified`)
-- per image: the source render, engine, model, full prompt, reference images, overlay facts and copy, and the QA verdict
+- per image: the source render, engine (which harness + tool made it), model, full prompt, reference images, overlay facts and copy, and the QA verdict
 - status `draft — awaiting client approval`
 
 `--force` exports images that haven't passed QA. Use it only when the user explicitly asks, and say so in your summary.

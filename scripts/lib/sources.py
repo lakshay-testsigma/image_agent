@@ -13,7 +13,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import re
 import urllib.parse
 import urllib.request
@@ -218,36 +217,3 @@ def file_to_text(path: Path) -> str:
     if suf in (".html", ".htm"):
         return html_to_text(raw)[1]
     return raw
-
-
-# ── optional web search providers ────────────────────────────────────────────
-
-def _get_json(url: str, headers: dict | None = None, body: dict | None = None):
-    data = json.dumps(body).encode() if body is not None else None
-    h = {"User-Agent": UA, "Accept": "application/json", **(headers or {})}
-    if data is not None:
-        h["Content-Type"] = "application/json"
-    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=h), timeout=30) as r:
-        return json.loads(r.read().decode())
-
-
-def search(query: str, n: int = 8) -> list[dict]:
-    provider = os.getenv("SEARCH_PROVIDER", "").strip().lower()
-    if provider == "tavily":
-        key = os.getenv("TAVILY_API_KEY") or die("TAVILY_API_KEY missing")
-        res = _get_json("https://api.tavily.com/search", {"Authorization": f"Bearer {key}"}, {"query": query, "max_results": n})
-        return [{"title": r.get("title"), "url": r.get("url"), "snippet": r.get("content")} for r in res.get("results", [])]
-    if provider == "brave":
-        key = os.getenv("BRAVE_API_KEY") or die("BRAVE_API_KEY missing")
-        q = urllib.parse.urlencode({"q": query, "count": n})
-        res = _get_json(f"https://api.search.brave.com/res/v1/web/search?{q}", {"X-Subscription-Token": key})
-        return [{"title": r.get("title"), "url": r.get("url"), "snippet": r.get("description")} for r in res.get("web", {}).get("results", [])]
-    if provider == "searxng":
-        base = os.getenv("SEARXNG_URL", "http://localhost:8080").rstrip("/")
-        res = _get_json(f"{base}/search?{urllib.parse.urlencode({'q': query, 'format': 'json'})}")
-        return [{"title": r.get("title"), "url": r.get("url"), "snippet": r.get("content")} for r in res.get("results", [])[:n]]
-    die(
-        "no SEARCH_PROVIDER configured in .env. Use your own web search tool instead, "
-        "then save each useful page with `studio.py fetch` or `studio.py add-source`."
-    )
-    return []

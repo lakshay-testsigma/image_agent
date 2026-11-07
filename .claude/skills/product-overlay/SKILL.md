@@ -6,9 +6,9 @@ argument-hint: <product-image-path> [render path]
 
 # Deterministic overlays (text, callouts, logos)
 
-**Product:** `$ARGUMENTS`. The first token is the product image path, and an optional second token is the render to decorate.
+**Product:** `$ARGUMENTS`. The first token is the product image path, and an optional second token is the render to decorate. If you see the literal text `$ARGUMENTS`, take them from the user's message.
 
-Image models garble lettering and invent numbers, so all added text is drawn here. You decide the layout freely: an infographic, a minimal corner caption, a dimension diagram, a story frame with a headline. Three guards apply:
+Image models garble lettering and invent numbers, so all added text is drawn here by Pillow, never by the image tool. You decide the layout freely: an infographic, a minimal corner caption, a dimension diagram, a story frame with a headline. Three guards apply:
 - `fact` elements must reference a fact whose status is **verified** (`uv run scripts/studio.py facts <product-path>`)
 - `copy` text must appear word-for-word in the brief (ideally under "Approved copy"). For new wording, ask the user to add it to the brief.
 - `image` elements (logos, badges, certification marks) must be real files the client supplied, usually in `assets/<product>/refs/` or `brands/`

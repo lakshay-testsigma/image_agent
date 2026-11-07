@@ -1,12 +1,12 @@
 ---
 name: product-creative
-description: Stage 4 for ONE product — turn the user's creative direction, brand profile, photos and verified facts into a shot plan and one gpt-image prompt per shot. Fully open-ended — follows whatever look the user wants. Use when planning mockups, photography concepts, scenes or prompts for a product image.
+description: Stage 4 for ONE product — turn the user's creative direction, brand profile, photos and verified facts into a shot plan and one image-generation prompt per shot. Fully open-ended — follows whatever look the user wants. Use when planning mockups, photography concepts, scenes or prompts for a product image.
 argument-hint: <product-image-path> [creative direction]
 ---
 
 # Creative direction → shot plan → prompts
 
-**Product:** `$ARGUMENTS`. The first token is the product image path. Any words after it are creative direction from the user, and they override the brief where the two conflict.
+**Product:** `$ARGUMENTS`. The first token is the product image path. Any words after it are creative direction from the user, and they override the brief where the two conflict. If you see the literal text `$ARGUMENTS`, take the path and direction from the user's message.
 
 Inputs to read: `assets/<product>/brief.md`, its brand profile (if referenced), `output/<id>/intake.md`, verified facts (`uv run scripts/studio.py facts <product-path>`), the product photos, and anything in the product's `refs/` folder.
 
@@ -31,12 +31,12 @@ Good defaults, which the brief can override:
 
 ## 2. Write one prompt per shot: `output/<id>/creative/prompts/<shot>.md`
 
-The whole file is sent to the image model as-is, so write only the prompt in it. Follow [prompting.md](prompting.md): say what each reference image is for, then the preservation contract, scene, lighting, camera, composition, mood, the avoid list, and the text policy.
+The whole file is passed to your image tool as-is, so write only the prompt in it. Follow [prompting.md](prompting.md): say what each reference image is for, then the preservation contract, scene, lighting, camera, composition, mood, the avoid list, and the text policy.
 
-Also note per shot in the plan: `--size`, `--quality`, `--n`, `--background`, and which refs to send (`--only-primary`, `--with-style-refs`, `--ref <file>`). The render stage reads these.
+Also note per shot in the plan: size/aspect, number of variations, transparent background or not, and which refs to attach (`--only-primary`, `--with-style-refs`, `--ref <file>`, as used by `studio.py refs` / `register`). The render stage reads these.
 
 ## 3. Checkpoint
 
-Show the user a compact shot list and the total image calls (shots × n). Ask before rendering, unless on autopilot. Rendering costs money.
+Show the user a compact shot list and the total number of generations (shots × variations). Ask before rendering, unless on autopilot.
 
 Record completion with `uv run scripts/studio.py status <product-path>`. The shot plan existing counts as creative done.

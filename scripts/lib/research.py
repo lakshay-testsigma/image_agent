@@ -1,40 +1,19 @@
-"""Research model pass: extract product facts (with verbatim quotes) from each saved source.
+"""Research extractions: product facts (with verbatim quotes) pulled from each saved source.
 
-The research model never answers from memory — it only reads text we saved in sources/.
-One call per source (chunked if long), cached by content hash, merged into facts.draft.json.
+The harness agent (Claude Code / OpenCode / Codex) reads one saved source text at a time, follows
+prompts/research-extract.md, and writes a JSON extraction. `studio.py extract --source S1 --input x.json`
+stores it here (validated, tied to the source's content hash); `studio.py extract` merges every stored
+extraction into research/facts.draft.json. No model is called from these scripts.
 """
 from __future__ import annotations
 
-import os
+import json
 import re
-import sys
 
-from . import models, paths, sources
+from . import paths, sources
 from .paths import Product, die
 
-MATCH_RANK = {"yes": 3, "likely": 2, "unclear": 1, "no": 0}
-
-
-def identity_hints(prod: Product) -> str:
-    parts = []
-    intake = prod.work / "intake.md"
-    if intake.exists():
-        parts.append("INTAKE NOTES (from the product photos):\n" + intake.read_text(encoding="utf-8")[:6000])
-    if prod.brief:
-        sec = paths.brief_section(paths.brief_text(prod), "Product")
-        if sec:
-            parts.append("CLIENT BRIEF — product identity:\n" + sec)
-    return "\n\n".join(parts) or "(no identity hints available)"
-
-
-def _chunks(text: str, size: int, overlap: int = 1500) -> list[str]:
-    if len(text) <= size:
-        return [text]
-    out, i = [], 0
-    while i < len(text):
-        out.append(text[i : i + size])
-        i += size - overlap
-    return out
+MATCH_VALUES = ("yes", "likely", "unclear", "no")
 
 
 def _key(s: str) -> str:
@@ -59,72 +38,80 @@ def _clean_fact(f: dict, sid: str) -> dict | None:
     }
 
 
-def extract(prod: Product, only: list[str] | None = None, force: bool = False) -> dict:
+def _cache(prod: Product, sid: str):
+    return prod.work / "research" / f"extract-{sid}.json"
+
+
+def store(prod: Product, sid: str, data: dict, by: str | None) -> dict:
+    """Validate and save the agent's extraction for one source."""
+    idx = {s["id"]: s for s in sources.load_index(prod)}
+    if sid not in idx:
+        die(f"unknown source '{sid}' — see `studio.py sources`.")
+    if not isinstance(data, dict) or not isinstance(data.get("facts"), list):
+        die('extraction must be a JSON object with a "facts" array (see prompts/research-extract.md).')
+    match = str(data.get("same_product", "unclear")).lower()
+    if match not in MATCH_VALUES:
+        die(f"same_product must be one of {MATCH_VALUES}")
+    raw = data["facts"]
+    facts = [cf for f in raw if (cf := _clean_fact(f, sid))]
+    s = idx[sid]
+    result = {
+        "source_id": sid,
+        "sha256": s["sha256"],
+        "tier": s["tier"],
+        "url": s.get("url"),
+        "extracted_by": by or data.get("extracted_by") or "harness agent",
+        "same_product": match,
+        "same_product_reason": str(data.get("same_product_reason", "")),
+        "facts": facts,
+        "dropped": len(raw) - len(facts),
+        "extracted_at": paths.now(),
+    }
+    paths.write_json(_cache(prod, sid), result)
+    return result
+
+
+def merge(prod: Product) -> dict:
+    """Merge every up-to-date stored extraction into facts.draft.json."""
     idx = sources.load_index(prod)
     if not idx:
         die("no sources saved yet — add some with `fetch` / `add-source` first.")
-    system = (paths.PROMPTS / "research-extract.md").read_text(encoding="utf-8")
-    hints = identity_hints(prod)
-    max_chars = int(os.getenv("RESEARCH_MAX_SOURCE_CHARS", "24000"))
-    _, _, model = models.role_config("research")
-    out_dir = prod.work / "research"
-
-    results = []
+    results, pending, stale = [], [], []
     for s in idx:
-        cache = out_dir / f"extract-{s['id']}.json"
-        cached = paths.read_json(cache)
-        skip = only and s["id"] not in only
-        if cached and (skip or (not force and cached.get("sha256") == s["sha256"])):
+        cached = paths.read_json(_cache(prod, s["id"]))
+        if not cached:
+            pending.append(s["id"])
+        elif cached.get("sha256") != s["sha256"]:
+            stale.append(s["id"])
+        else:
             results.append(cached)
-            continue
-        if skip:
-            continue
-
-        text = sources.source_text(prod, s["id"])
-        parts = _chunks(text, max_chars)
-        facts, best, reason = [], None, ""
-        for i, chunk in enumerate(parts, 1):
-            print(f"[research] {s['id']} part {i}/{len(parts)} ({len(chunk)} chars) → {model}", file=sys.stderr)
-            user = (
-                f"PRODUCT IDENTITY HINTS\n{hints}\n\n"
-                f"SOURCE {s['id']} — tier: {s['tier']}; title: {s.get('title') or '-'}; url: {s.get('url') or '-'}"
-                f" (part {i} of {len(parts)})\n<<<SOURCE\n{chunk}\nSOURCE>>>\n\nReturn the JSON object only."
-            )
-            data = models.parse_json(models.chat("research", system, user, json_mode=True, temperature=0))
-            match = str(data.get("same_product", "unclear")).lower()
-            if best is None or MATCH_RANK.get(match, 1) > MATCH_RANK.get(best, 1):
-                best, reason = match, str(data.get("same_product_reason", ""))
-            facts += [cf for f in data.get("facts", []) if (cf := _clean_fact(f, s["id"]))]
-
-        result = {
-            "source_id": s["id"],
-            "sha256": s["sha256"],
-            "tier": s["tier"],
-            "url": s.get("url"),
-            "model": model,
-            "same_product": best or "unclear",
-            "same_product_reason": reason,
-            "facts": facts,
-            "extracted_at": paths.now(),
-        }
-        paths.write_json(cache, result)
-        results.append(result)
 
     all_facts = []
     for r in results:
         for f in r["facts"]:
             all_facts.append({"id": f"F{len(all_facts) + 1}", **f})
+    by = sorted({r.get("extracted_by") or "harness agent" for r in results})
     draft = {
         "product_id": prod.id,
         "generated_at": paths.now(),
-        "model": model,
+        "extracted_by": ", ".join(by) or None,
         "sources": {
             r["source_id"]: {"tier": r["tier"], "url": r.get("url"), "same_product": r["same_product"],
                              "reason": r["same_product_reason"], "facts": len(r["facts"])}
             for r in results
         },
+        "pending_sources": pending,
+        "stale_sources": stale,
         "facts": all_facts,
     }
-    paths.write_json(out_dir / "facts.draft.json", draft)
-    paths.record(prod, "research", facts=len(all_facts), sources=len(results), model=model)
+    paths.write_json(prod.work / "research" / "facts.draft.json", draft)
+    paths.record(prod, "research", facts=len(all_facts), sources=len(results), pending=len(pending), stale=len(stale))
     return draft
+
+
+def load_input(path) -> dict:
+    try:
+        return json.loads(paths.p(path).read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        die(f"{path} is not valid JSON: {e}")
+    return {}
