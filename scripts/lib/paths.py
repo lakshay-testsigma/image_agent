@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,10 +28,6 @@ STYLE_REF_DIR = "refs"
 
 def die(msg: str) -> None:
     raise SystemExit(f"error: {msg}")
-
-
-def warn(msg: str) -> None:
-    print(f"warning: {msg}", file=sys.stderr)
 
 
 def now() -> str:
