@@ -37,3 +37,37 @@ Starting points to mix, adapt or ignore. The user's direction always wins.
 **Infographic hero.** Product on a soft gradient, space for 3–5 feature callouts with leader lines (added by overlay, using verified facts only).
 
 Combine freely, for example "luxury editorial light + Japandi set + macro detail of the joinery".
+
+---
+
+## Beyond photography (mediums)
+
+**3D render.** Clean CGI, soft global illumination, clay or glossy materials, floating objects, product exploded views.
+
+**Isometric.** 30° grid, miniature worlds, tech and logistics stories, SaaS feature explainers.
+
+**Flat vector / editorial illustration.** Bold shapes, limited palette, grain texture, explainer and blog headers.
+
+**Line art / ink / engraving.** Monoline or cross-hatched, packaging and heritage brands, menus.
+
+**Painterly.** Watercolour, gouache, oil, pastel. Travel posters, children's books, premium food and wine.
+
+**Anime / comic / manga key visual.** Cel shading, dynamic angles, speed lines. Games, entertainment, youth brands.
+
+**Pixel art / retro digital.** 8/16-bit, Y2K, vaporwave, synthwave. Gaming, music, nostalgia campaigns.
+
+**Collage / mixed media.** Cut-paper, risograph, halftone, photo-montage. Fashion, culture, music, zines.
+
+**Claymation / felt / papercraft.** Tactile, handmade, playful. Kids, food, friendly fintech.
+
+**Swiss / Bauhaus / typographic poster.** Grids and strong geometry, leaving space for overlay typography.
+
+**Blueprint / technical.** Schematic lines, callouts, engineering credibility. Tools, automotive, hardware.
+
+**Data-viz / infographic backgrounds.** Calm gradients and shapes with room for verified numbers added by overlay.
+
+**Cinematic.** Anamorphic flares, film grain, teal-orange or bleach-bypass grade, a still from a film that doesn't exist.
+
+**Documentary / reportage.** Natural, imperfect, candid. NGOs, corporate culture, travel.
+
+Any medium works with any subject. For `exact` fidelity in a stylised medium, either keep the subject photographic inside a stylised world, or composite the real subject with `overlay`.

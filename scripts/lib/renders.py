@@ -24,8 +24,12 @@ def shot_slug(shot: str) -> str:
 
 
 def reference_images(prod: Product, *, only_primary=False, no_product_refs=False, extra=None, with_style_refs=False) -> list[Path]:
-    """Order: primary product photo, other product photos, extra --ref files, then refs/ (style refs)."""
-    refs = [] if no_product_refs else ([prod.primary_image] if only_primary else list(prod.images))
+    """Order: primary subject photo, other subject photos, extra --ref files, then refs/ (style refs).
+    A concept job (no subject photo) has only --ref files and refs/."""
+    if no_product_refs or not prod.images:
+        refs = []
+    else:
+        refs = [prod.primary_image] if only_primary else list(prod.images)
     refs += [paths.p(r) for r in (extra or [])]
     if with_style_refs:
         refs += prod.style_refs

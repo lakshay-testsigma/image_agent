@@ -1,8 +1,8 @@
-# QA report — <product_id>
+# QA report — <job_id>
 
 Reviewed: <date> · Reviewer: <agent model> (+ second-opinion subagent if used)
 Brief direction: <one line>
-Preservation checklist used: intake.md
+Fidelity mode: <exact | likeness | inspired | none> · Preservation checklist: intake.md
 
 ## Summary
 - Approved: N · Failed: N · Needs human review: N
@@ -11,7 +11,7 @@ Preservation checklist used: intake.md
 ## Per image
 
 ### renders/<shot>/vN-i.png: APPROVED | FAILED | HUMAN REVIEW
-- **Factual:** pass/fail/na. <facts drawn and checked; implicit claims>
+- **Factual / compliance:** pass/fail/na. <facts drawn and checked; implicit claims; disclosures, consent, rights>
 - **Visual:** pass/fail. <checklist results; differences found>
 - **Creative:** pass/fail. <fit to brief and shot plan; quality>
 - **Fix for next render:** <specific prompt or flag change, if failed>

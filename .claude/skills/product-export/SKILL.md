@@ -1,23 +1,23 @@
 ---
 name: product-export
-description: Stage 8 for ONE product — package QA-approved images into output/<id>/final/ with a listing.json (verified facts only, full audit trail of prompts/models/refs/QA) and an optional product description. Never publishes. Use when the user wants final deliverables or a listing for a product image.
-argument-hint: <product-image-path>
+description: Stage 8 for ONE subject — package QA-approved images into output/<id>/final/ with a listing.json (verified facts only, full audit trail of prompts/engines/refs/QA) and optional copy (product description, alt text, captions). Never publishes. Use when the user wants final deliverables, a listing or a hand-off package.
+argument-hint: <subject-image-path>
 ---
 
 # Export approved assets
 
-**Product:** `$ARGUMENTS` (first token = product image path; if you see the literal text `$ARGUMENTS`, take it from the user's message).
+**Subject:** `$ARGUMENTS` (first token = subject image path; if you see the literal text `$ARGUMENTS`, take it from the user's message).
 
-## 1. Optional: product description
+## 1. Optional: description, alt text, captions
 
-If the user wants listing copy, write `output/<id>/final/description.md` using **only verified facts** (`uv run scripts/studio.py facts <product-path>`) and the brief's tone and brand profile. Claims without a verified fact behind them ("waterproof", "best-selling", "eco") are out unless they're in the brief's approved copy. List any `needs_review` facts you left out so the user knows.
+If the user wants listing copy, alt text or social captions, write `output/<id>/final/description.md` using **only verified facts** (`uv run scripts/studio.py facts <path>`) and the brief's tone and brand profile. Claims without a verified fact behind them ("waterproof", "best-selling", "eco") are out unless they're in the brief's approved copy. List any `needs_review` facts you left out so the user knows.
 
 ## 2. Export
 
 ```bash
-uv run scripts/studio.py export <product-path> --description-file output/<id>/final/description.md
+uv run scripts/studio.py export <path> --description-file output/<id>/final/description.md
 # or pick specific images (each must be QA-approved):
-uv run scripts/studio.py export <product-path> --image output/<id>/renders/catalog-white/v2-1-callouts.png --image ...
+uv run scripts/studio.py export <path> --image output/<id>/renders/catalog-white/v2-1-callouts.png --image ...
 ```
 This copies the images to `output/<id>/final/<id>-<shot>-NN.png` and writes `final/listing.json` with:
 - identity and verified facts only (unverified keys go under `excluded_unverified`)

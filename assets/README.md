@@ -1,6 +1,6 @@
-# assets/ — your input products
+# assets/ — your input jobs
 
-One folder per product, numbered so they stay in order:
+One folder per subject/job (any genre or industry: product, dish, person, room, vehicle, app, artwork, campaign ...), numbered so they stay in order:
 
 ```
 assets/
@@ -17,10 +17,11 @@ assets/
 │       └── logo.png
 ├── 002-linen-shirt/
 │   └── ...
-└── 003-ceramic-mug.jpg        ← quick mode: a single loose photo (brief = 003-ceramic-mug.md)
+├── 003-ceramic-mug.jpg        ← quick mode: a single loose photo (brief = 003-ceramic-mug.md)
+└── 004-launch-poster/         ← concept job: brief.md (+ refs/) and no subject photo
 ```
 
-Then process ONE product per session by passing a photo (or its folder) to a skill:
+Then process ONE job per session by passing a photo (or its folder) to a skill:
 
 ```
 /product-studio assets/001-oak-chair/01-front.jpg
@@ -28,5 +29,5 @@ Then process ONE product per session by passing a photo (or its folder) to a ski
 
 Rules the pipeline follows:
 - Files here are never modified. All output goes to `output/<product-id>/`.
-- Files in `refs/` are inspiration or placeable assets, never treated as the product.
+- Files in `refs/` are inspiration or placeable assets (logos, screenshots, artwork), never treated as the subject.
 - Supported formats: .jpg .jpeg .png .webp. Bigger, sharper, evenly lit photos = better renders.

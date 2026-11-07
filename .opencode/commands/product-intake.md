@@ -1,9 +1,9 @@
 ---
-description: Stage 1 for ONE product — run the product-intake skill on one product image
+description: Stage 1 — workspace, brief, photo study, subject type, fidelity mode
 ---
 
 Load the `product-intake` skill with the skill tool and follow it exactly.
 
-Arguments (first token = product image path, the rest = extra instructions): $ARGUMENTS
+Arguments (first token = subject image path or job folder, the rest = extra instructions): $ARGUMENTS
 
-The skill's "Product" line refers to these arguments.
+The skill's "Subject" line refers to these arguments.

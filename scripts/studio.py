@@ -54,7 +54,9 @@ def cmd_init(a):
         if not paths.brief_section(text, "Creative direction"):
             warnings.append("brief has no 'Creative direction' — ask the user what look they want before planning shots.")
     else:
-        warnings.append("no brief.md for this product — copy assets/_template/brief.md next to the images, or ask the user.")
+        warnings.append("no brief.md for this subject — copy assets/_template/brief.md next to the images, or ask the user.")
+    if not prod.images:
+        warnings.append("concept job: no subject photo — images are generated from the brief (+ refs/ as style references).")
     m = paths.load_manifest(prod)
     m["inputs"] = prod.to_dict()
     paths.write_json(prod.manifest_path, m)
@@ -69,6 +71,7 @@ def cmd_status(a):
     prod = paths.resolve(a.product)
     m = paths.load_manifest(prod)
     st = m["stages"]
+    skipped = {k: v.get("reason") for k, v in st.items() if v.get("status") == "skipped"}
     done = {s for s in STAGES if s in st} | ({"render"} if any(k.startswith("render:") for k in st) else set())
     w = prod.work
     files = {
@@ -85,13 +88,20 @@ def cmd_status(a):
     nxt = next((s for s in STAGES if s not in done), None)
     out({
         "product_id": prod.id,
-        "stages_done": [s for s in STAGES if s in done],
+        "stages_done": [s for s in STAGES if s in done and s not in skipped],
+        "stages_skipped": skipped,
         "next_stage": nxt,
         "files": {k: paths.rel(v) for k, v in files.items() if v.exists()},
         "renders": renders,
         "factcheck_summary": {k: st["factcheck"].get(k) for k in ("verified", "needs_review", "conflict", "rejected")} if "factcheck" in st else None,
         "inputs": prod.to_dict(),
     })
+
+
+def cmd_skip(a):
+    prod = paths.resolve(a.product)
+    paths.record(prod, a.stage, status="skipped", reason=a.reason)
+    out({"stage": a.stage, "status": "skipped", "reason": a.reason})
 
 
 def cmd_fetch(a):
@@ -249,7 +259,7 @@ def cmd_export(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="studio.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    P = "product image path (or its folder) — e.g. assets/001-oak-chair/01-front.jpg"
+    P = "subject image path (or its folder) — e.g. assets/001-oak-chair/01-front.jpg"
 
     def cmd(name, fn, help_):
         s = sub.add_parser(name, help=help_)
@@ -261,6 +271,11 @@ def main(argv=None):
 
     s = cmd("status", cmd_status, "show what is done for this product and what comes next")
     s.add_argument("product", help=P)
+
+    s = cmd("skip", cmd_skip, "mark a stage as not needed for this job (e.g. research for a portrait or a concept poster)")
+    s.add_argument("product", help=P)
+    s.add_argument("--stage", required=True, choices=["research", "factcheck"])
+    s.add_argument("--reason", required=True, help="why, e.g. 'artwork reproduction: no factual claims on images'")
 
     tiers = ["client", "manufacturer", "gs1", "distributor", "retailer", "other"]
     s = cmd("fetch", cmd_fetch, "download a URL (HTML/PDF), convert to text, save as evidence")
@@ -314,8 +329,8 @@ def main(argv=None):
     def ref_flags(s):
         s.add_argument("--ref", action="append", help="extra reference image (style, model, logo); repeatable")
         s.add_argument("--with-style-refs", action="store_true", help="also include every image in the product's refs/ folder")
-        s.add_argument("--only-primary", action="store_true", help="only the primary product image, not all angles")
-        s.add_argument("--no-product-refs", action="store_true", help="no product photos (background plates / concepts only)")
+        s.add_argument("--only-primary", action="store_true", help="only the primary subject image, not all angles")
+        s.add_argument("--no-product-refs", action="store_true", help="no subject photos (background plates / free concepts)")
 
     s = cmd("refs", cmd_refs, "ordered reference images to attach to the harness image tool for a shot")
     s.add_argument("product", help=P)

@@ -1,6 +1,7 @@
 """Deterministic text / graphics overlay — the ONLY way text gets onto final images.
 
-Image models garble typography and invent specs, so spec callouts, badges and copy are drawn here.
+Image models garble typography and invent specs, so spec callouts, badges and copy are drawn here — and
+exact assets (logos, real app screenshots, artwork, labels) are composited here instead of being redrawn.
 The layout is entirely up to the agent (spec JSON below); the only hard rules are:
   * "fact" elements must reference a fact whose status is "verified" in facts.verified.json
   * "copy" text must appear verbatim in the product brief (user-approved wording)
@@ -17,9 +18,13 @@ Spec format (coordinates are fractions of the canvas, 0..1):
     {"type": "text",  "fact": "height", "template": "{label}: {value}", "x": 0.05, "y": 0.9,
                       "size": 0.035, "color": "#FFFFFF", "font": "Helvetica", "anchor": "lm"},
     {"type": "text",  "copy": "Handcrafted in Portugal", "x": 0.95, "y": 0.9, "anchor": "rm", "size": 0.03},
-    {"type": "image", "path": "assets/001-oak-chair/refs/logo.png", "x": 0.05, "y": 0.05, "w": 0.15}
+    {"type": "image", "path": "assets/001-oak-chair/refs/logo.png", "x": 0.05, "y": 0.05, "w": 0.15},
+    {"type": "image", "path": "assets/005-app/02-dashboard.png", "radius": 24,
+                      "corners": [[0.31, 0.22], [0.69, 0.20], [0.70, 0.78], [0.30, 0.80]]}
   ]
 }
+Image options: x, y, w (height follows aspect) or x, y, w, h + fit (contain | cover | stretch); or "corners"
+(4 points TL, TR, BR, BL) to warp it in perspective onto a screen, sign, wall, page or label; radius; opacity.
 Text options: size (fraction of canvas height), color, font (file path or font name), anchor (Pillow anchor,
 default "la"), max_width (fraction → wraps), align, line_spacing, stroke_width, stroke_color, opacity, uppercase,
 letter_spacing (px). Template fields: {label} {value} {unit} {variant} ({value} already includes the unit).
@@ -107,6 +112,80 @@ def _fit_base(base: Image.Image, canvas: dict) -> Image.Image:
     return bg
 
 
+def _solve(a: list[list[float]], b: list[float]) -> list[float]:
+    """Gaussian elimination for the 8x8 perspective system (no numpy needed)."""
+    n = len(b)
+    m = [row[:] + [b[i]] for i, row in enumerate(a)]
+    for c in range(n):
+        p = max(range(c, n), key=lambda r: abs(m[r][c]))
+        if abs(m[p][c]) < 1e-12:
+            raise ValueError("degenerate corners")
+        m[c], m[p] = m[p], m[c]
+        for r in range(n):
+            if r != c:
+                k = m[r][c] / m[c][c]
+                m[r] = [x - k * y for x, y in zip(m[r], m[c])]
+    return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def _perspective_coeffs(dst: list[tuple], src: list[tuple]) -> list[float]:
+    """Coefficients mapping output (dst) points back to input (src) points, for Image.transform."""
+    a, b = [], []
+    for (x, y), (u, v) in zip(dst, src):
+        a.append([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.append(u)
+        a.append([0, 0, 0, x, y, 1, -v * x, -v * y]); b.append(v)
+    return _solve(a, b)
+
+
+def _round(img: Image.Image, radius) -> Image.Image:
+    r = int(radius * min(img.size)) if radius < 1 else int(radius)
+    if r <= 0:
+        return img
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, img.width - 1, img.height - 1], radius=r, fill=255)
+    img.putalpha(Image.composite(img.getchannel("A"), mask, mask))
+    return img
+
+
+def _place_image(src: Image.Image, el: dict, W: int, H: int, n: int) -> Image.Image:
+    """Return a full-canvas layer with `src` placed by box (x, y, w[, h, fit]) or by 4 corners (perspective)."""
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    if el.get("radius"):
+        src = _round(src, el["radius"])
+    if el.get("opacity") is not None:
+        src.putalpha(src.getchannel("A").point(lambda a: int(a * el["opacity"])))
+    if el.get("corners"):
+        pts = [(float(x) * W, float(y) * H) for x, y in el["corners"]]  # TL, TR, BR, BL
+        if len(pts) != 4:
+            die(f"element {n}: 'corners' needs 4 points: top-left, top-right, bottom-right, bottom-left")
+        sw, sh = src.size
+        try:
+            coeffs = _perspective_coeffs(pts, [(0, 0), (sw, 0), (sw, sh), (0, sh)])
+        except ValueError:
+            die(f"element {n}: corners are degenerate")
+        return src.transform((W, H), Image.PERSPECTIVE, coeffs, Image.BICUBIC)
+    w = int(el["w"] * W)
+    if el.get("h") is None:
+        img = src.resize((w, max(1, round(src.height * w / src.width))), Image.LANCZOS)
+        out.alpha_composite(img, (int(el["x"] * W), int(el["y"] * H)))
+        return out
+    h = int(el["h"] * H)
+    fit = el.get("fit", "contain")
+    if fit == "stretch":
+        img = src.resize((w, h), Image.LANCZOS)
+        ox, oy = 0, 0
+    else:
+        scale = (min if fit == "contain" else max)(w / src.width, h / src.height)
+        img = src.resize((max(1, round(src.width * scale)), max(1, round(src.height * scale))), Image.LANCZOS)
+        if fit == "cover":
+            left, top = (img.width - w) // 2, (img.height - h) // 2
+            img, ox, oy = img.crop((left, top, left + w, top + h)), 0, 0
+        else:
+            ox, oy = (w - img.width) // 2, (h - img.height) // 2
+    out.alpha_composite(img, (int(el["x"] * W) + ox, int(el["y"] * H) + oy))
+    return out
+
+
 def render_overlay(prod: Product, spec_path: Path) -> dict:
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     verified = paths.read_json(prod.work / "factcheck" / "facts.verified.json")
@@ -142,12 +221,7 @@ def render_overlay(prod: Product, spec_path: Path) -> dict:
             src = paths.p(el["path"])
             if not src.exists():
                 die(f"element {n}: image not found: {el['path']}")
-            logo = Image.open(src).convert("RGBA")
-            w = int(el["w"] * W)
-            logo = logo.resize((w, round(logo.height * w / logo.width)), Image.LANCZOS)
-            if el.get("opacity") is not None:
-                logo.putalpha(logo.getchannel("A").point(lambda a: int(a * el["opacity"])))
-            layer.alpha_composite(logo, (int(el["x"] * W), int(el["y"] * H)))
+            layer.alpha_composite(_place_image(Image.open(src).convert("RGBA"), el, W, H, n))
         elif t == "text":
             if "fact" in el:
                 key = el["fact"]

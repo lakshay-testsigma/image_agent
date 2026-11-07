@@ -1,9 +1,9 @@
 ---
-description: Stage 7 for ONE product — run the product-qa skill on one product image
+description: Stage 7 — factual/compliance, fidelity and creative QA gates
 ---
 
 Load the `product-qa` skill with the skill tool and follow it exactly.
 
-Arguments (first token = product image path, the rest = extra instructions): $ARGUMENTS
+Arguments (first token = subject image path or job folder, the rest = extra instructions): $ARGUMENTS
 
-The skill's "Product" line refers to these arguments.
+The skill's "Subject" line refers to these arguments.

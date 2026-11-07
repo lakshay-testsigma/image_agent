@@ -1,10 +1,12 @@
-"""Product resolution, workspace layout, manifest + JSON helpers.
+"""Subject resolution, workspace layout, manifest + JSON helpers.
 
-A "product" is resolved from ONE path the user passes to a skill:
-  assets/001-oak-chair/01-front.jpg   -> product folder assets/001-oak-chair/ (primary image = that file)
-  assets/001-oak-chair/               -> same product, primary image = first image in the folder
-  assets/003-mug.jpg                  -> loose single-image product (brief = assets/003-mug.md)
+A "product" here means ANY subject an image job is about: a retail product, a dish, a person, a pet, a
+property, a vehicle, an app screen, an artwork, a brand campaign ... It is resolved from ONE path:
+  assets/001-oak-chair/01-front.jpg   -> folder assets/001-oak-chair/ (primary image = that file)
+  assets/001-oak-chair/               -> same subject, primary image = first image in the folder
+  assets/003-mug.jpg                  -> loose single-image subject (brief = assets/003-mug.md)
   001-oak-chair                       -> shorthand for assets/001-oak-chair/
+  assets/004-launch-poster/           -> concept job: brief.md (+ optional refs/) but no subject photo
 
 All generated work for that product lives in output/<product-id>/. Originals are never modified.
 """
@@ -84,7 +86,7 @@ def write_json(path: Path, data) -> None:
 class Product:
     id: str
     asset_dir: Path
-    primary_image: Path
+    primary_image: Path | None
     images: list[Path]
     style_refs: list[Path] = field(default_factory=list)
     brief: Path | None = None
@@ -98,7 +100,7 @@ class Product:
         return {
             "product_id": self.id,
             "asset_dir": rel(self.asset_dir),
-            "primary_image": rel(self.primary_image),
+            "primary_image": rel(self.primary_image) if self.primary_image else None,
             "product_images": [rel(i) for i in self.images],
             "style_refs": [rel(i) for i in self.style_refs],
             "brief": rel(self.brief) if self.brief else None,
@@ -137,9 +139,9 @@ def resolve(arg: str) -> Product:
         if path.name.startswith("_"):
             die(f"{arg} is a template folder. Copy it to assets/NNN-product-name/ first.")
         asset_dir, images = path, list_images(path)
-        if not images:
-            die(f"no product images ({', '.join(sorted(IMAGE_EXTS))}) found in {arg}")
-        primary = images[0]
+        if not images and not (path / "brief.md").exists():
+            die(f"no subject images ({', '.join(sorted(IMAGE_EXTS))}) and no brief.md in {arg}")
+        primary = images[0] if images else None  # None = concept job (brief + refs only)
 
     if key is None:
         try:
@@ -149,7 +151,7 @@ def resolve(arg: str) -> Product:
         brief = asset_dir / "brief.md"
         style_refs = list_images(asset_dir / STYLE_REF_DIR)
 
-    images = [primary] + [i for i in images if i != primary]
+    images = ([primary] if primary else []) + [i for i in images if i != primary]
     pid = slugify(key)
     return Product(
         id=pid,
