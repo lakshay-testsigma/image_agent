@@ -4,7 +4,7 @@ Image models garble typography and invent specs, so spec callouts, badges and co
 exact assets (logos, real app screenshots, artwork, labels) are composited here instead of being redrawn.
 The layout is entirely up to the agent (spec JSON below); the only hard rules are:
   * "fact" elements must reference a fact whose status is "verified" in facts.verified.json
-  * "copy" text must appear verbatim in the product brief (user-approved wording)
+  * "copy" text must appear verbatim in the brief's "Approved copy" section (user-approved wording)
   * "image" elements (logos, badges) must be real files the client supplied
 
 Spec format (coordinates are fractions of the canvas, 0..1):
@@ -194,7 +194,7 @@ def render_overlay(prod: Product, spec_path: Path) -> dict:
         for f in verified["facts"]:
             if f["status"] == "verified":
                 facts.setdefault(f["key"], []).append(f)
-    brief = norm(paths.strip_comments(paths.brief_text(prod)))
+    approved_copy = paths.approved_copy(paths.brief_text(prod))
 
     base_path = paths.p(spec["base"])
     if not base_path.exists():
@@ -235,12 +235,12 @@ def render_overlay(prod: Product, spec_path: Path) -> dict:
                     die(f"element {n}: no verified '{key}' for variant {variant!r}")
                 text = el.get("template", "{label}: {value}").format(
                     label=f.get("label") or key, value=fmt_value(f), unit=f.get("unit") or "", variant=f.get("variant") or "")
-                used_facts.append({"key": key, "variant": f.get("variant"), "text": text})
+                used_facts.append({"key": key, "variant": f.get("variant"), "text": text, "value": fmt_value(f)})
             elif "copy" in el:
                 text = el["copy"]
-                if norm(text) not in brief:
-                    die(f"element {n}: copy {text!r} is not in the product brief. Add it to the brief's "
-                        "'Approved copy' section (user-approved wording) first.")
+                if " ".join(text.lower().split()) not in approved_copy:
+                    die(f"element {n}: copy {text!r} is not a line or quoted phrase in the brief's 'Approved copy' "
+                        "section. Only wording the user put there may be drawn, whole — ask them to add it.")
                 used_copy.append(text)
             else:
                 die(f"element {n}: text needs either 'fact' or 'copy'")
@@ -273,7 +273,7 @@ def render_overlay(prod: Product, spec_path: Path) -> dict:
     out.parent.mkdir(parents=True, exist_ok=True)
     img.convert("RGB").save(out) if out.suffix.lower() in (".jpg", ".jpeg") else img.save(out)
     meta = {"base": paths.rel(base_path), "output": paths.rel(out), "spec": paths.rel(spec_path),
-            "facts_rendered": used_facts, "copy_rendered": used_copy, "created_at": paths.now()}
+            "size": [W, H], "facts_rendered": used_facts, "copy_rendered": used_copy, "created_at": paths.now()}
     paths.write_json(out.with_suffix(".overlay.json"), meta)
     paths.record(prod, "overlay", output=paths.rel(out))
     return meta

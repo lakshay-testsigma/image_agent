@@ -6,7 +6,7 @@ argument-hint: <subject-image-path>
 
 # Product research
 
-**Subject:** `$ARGUMENTS` (first token = subject image path). If you see the literal text `$ARGUMENTS`, take the path from the user's message; ask if missing. Run `product-intake` first if `output/<id>/intake.md` doesn't exist.
+**Subject:** `$ARGUMENTS` (first token = subject image path). If you see the literal text `$ARGUMENTS`, take the path from the user's message; ask if missing. Run `product-intake` first if `output/<id>/intake.json` doesn't exist.
 
 **Needed only when facts will appear** on images, alt text or a listing (specs, ingredients, nutrition, area, range, prices, dates, awards, certifications). For a portrait, an art piece or a mood campaign with only approved copy, skip it: `uv run scripts/studio.py skip <path> --stage research --reason "..."` (and the same for `factcheck`).
 
@@ -19,9 +19,9 @@ argument-hint: <subject-image-path>
 | `client` | Brief "Known facts" (auto-saved as S0), client spec sheets / PDFs | authoritative |
 | `manufacturer` | The subject's official owner: brand product page, manual, spec sheet, menu, official listing, developer, venue, organiser, artist | authoritative |
 | `gs1` | Official registries: GS1 / GTIN lookup, land/property register, vehicle type approval, regulator database | authoritative for identity |
-| `distributor` | Authorised distributor / agent / official reseller listings | secondary |
-| `retailer` | Other retailers | supplementary only |
-| `other` | Reviews, forums, blogs | never enough alone |
+| `distributor` | Authorised distributor / agent / official reseller listings | secondary: one alone is `needs_review` |
+| `retailer` | Other retailers | secondary: two distributor/retailer sources on different domains verify together |
+| `other` | Reviews, forums, blogs | never verifies a fact, however many agree |
 
 Search with your harness's web search tool (Claude Code: WebSearch; OpenCode: `websearch`/`webfetch`; Codex: web search). Use the intake's research leads: visible label text, model numbers, barcode, brief URLs. Aim for one or two manufacturer or client sources, plus one or two independent secondary sources. Skip pages about a different model, size, unit or edition unless they're clearly labelled.
 
@@ -40,12 +40,12 @@ uv run scripts/studio.py add-source <path> --text-file /path/to/page.txt --url "
 
 uv run scripts/studio.py sources <path>      # list what's saved
 ```
-Pick the tier honestly. The tier decides what counts as verified. When saving text by hand, copy the page faithfully: don't summarise or fix anything.
+Pick the tier honestly. The tier decides what counts as verified, and the report names every source that was treated as authoritative so the user can see your choice. If you're not sure a site is the official one, use `retailer`. Always pass `--url` when the text came from the web: sources without a URL can't corroborate each other. When saving text by hand, copy the page faithfully: don't summarise or fix anything.
 
 ## 3. Extract facts (you do this, one source at a time)
 
 For each source listed by `sources` (including `S0`):
-1. Read `prompts/research-extract.md` (the rules and output format) and the saved text `output/<id>/sources/<SID>.txt`. Use only that text: identity hints from `intake.md` tell you which product, never what its values are.
+1. Read `prompts/research-extract.md` (the rules and output format) and the saved text `output/<id>/sources/<SID>.txt`. Use only that text: identity hints from `intake.json` tell you which product, never what its values are.
 2. Write the JSON object to `output/<id>/research/input-<SID>.json`. Quotes must be copied character-for-character from the source file.
 3. Store it:
    ```bash
@@ -57,8 +57,8 @@ Many sources? You may hand each one to a subagent (Claude Code: Agent tool; Open
 
 ## 4. Review the draft
 
-Open `facts.draft.json` and check it against the brief's "Facts to verify / show":
-- Are the required facts present? If not, search for more sources and repeat steps 2–3.
+Open `facts.draft.json` and check it against the brief's "Facts to verify / show" and `facts_needed.keys` in `intake.json`:
+- Are the required facts present? If not, search for more sources and repeat steps 2–3. If nothing reliable exists, leave the fact out: it will be reported as `unavailable`. Never fill a gap from memory or from what the photos suggest.
 - Did a source get `same_product: no`? Its facts will be rejected. Check that this is right.
 - Facts are still **unverified**. Don't present them as true yet. Go on to `product-factcheck`.
 

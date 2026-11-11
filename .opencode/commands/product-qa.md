@@ -1,5 +1,5 @@
 ---
-description: Stage 7 — factual/compliance, fidelity and creative QA gates
+description: Stage 8 — factual/compliance, fidelity and creative QA gates
 ---
 
 Load the `product-qa` skill with the skill tool and follow it exactly.

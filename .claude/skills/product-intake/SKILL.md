@@ -1,6 +1,6 @@
 ---
 name: product-intake
-description: Stage 1 for ONE subject (any genre or industry) — resolve the image path, create the workspace, read the brief, study the photos, and record subject type, industry, fidelity mode, identity, visible text, materials and colours. Use when starting work on an image job or when the user asks what a subject is.
+description: Stage 1 for ONE subject (any genre or industry) — resolve the image path, create the workspace, read the brief, study the photos, and record subject type, industry, fidelity mode, identity, visible text, materials and colours as a schema-validated intake.json. Use when starting work on an image job or when the user asks what a subject is.
 argument-hint: <subject-image-path>
 ---
 
@@ -27,45 +27,55 @@ argument-hint: <subject-image-path>
    - **Facts needed?** Will any factual claim (specs, numbers, ingredients, prices, dates) appear on images or in a listing? If not, research and fact-check can be skipped (see `product-studio`).
    - **People:** if real, identifiable people are in the photos and the brief doesn't confirm their consent, ask before going further.
 
-5. **Write `output/<id>/intake.md`** in this shape (add sections freely):
+5. **Write `output/<id>/intake.json`** (shape: `schemas/intake.schema.json`; unknown keys are rejected, so check the schema rather than guessing):
 
-   ```markdown
-   # Intake — <job_id>
-   ## Job
-   - Subject type / industry / playbook(s) from genres.md
-   - Fidelity: exact | likeness | inspired | none (source: brief / user / assumed)
-   - Facts needed: yes (which) | no (why)
-   - Deliverables / channels / medium (from brief)
-   ## Identity hypothesis
-   - What it is / name / brand / model (confidence + why)
-   ## Visible text (verbatim, as printed)
-   - "..." (on label / tag / packaging / sign / screen)
-   ## Physical observations
-   - Shape, construction, materials, colours (approx hex), finish, hardware, part count
-   - People/pets: distinguishing features (face shape, hair, skin tone, glasses, markings)
-   - Places/rooms: structure (walls, windows, doors, views)
-   ## Photo set
-   - 01-front.jpg: angle, background, lighting, quality issues (blur, crop, reflections)
-   ## Preservation checklist (must stay identical / recognisable in every image)
-   - e.g. logo top-left of tag, 4 brass rivets / round tortoiseshell glasses / bay window on the left
-   ## Compliance cues
-   - From the brief and the genre playbook
-   ## Research leads
-   - Search queries / URLs / barcode to check (or "none — no facts needed")
-   ## From the brief
-   - Creative direction summary, shots wanted, constraints, required facts
+   ```json
+   {
+     "subject": {"type": "product", "category": "furniture / lounge chair", "industry": "homeware", "playbooks": ["Retail products / e-commerce"]},
+     "fidelity": {"mode": "exact", "source": "brief"},
+     "facts_needed": {"needed": true, "keys": ["height", "material"], "reason": "spec callouts on the catalog image"},
+     "identity": {"name": "Nordlys lounge chair", "brand": "Nordlys", "model": null, "identifiers": {"sku": "NL-204"},
+                  "confidence": "medium", "basis": "brand tag under the seat; model not visible"},
+     "visible_text": [{"text": "NORDLYS", "location": "woven tag, rear left leg"}],
+     "visual": {
+       "shape": "low lounge chair, curved arms, tapered legs",
+       "construction": "mortise joints, woven seat",
+       "materials": ["oak", "paper cord"],
+       "colors": [{"name": "natural oak", "hex": "#C9A46B", "where": "frame"}],
+       "finish": "matte oil",
+       "parts": ["4 legs", "2 arms", "woven seat"],
+       "distinguishing_features": ["visible joint at the arm", "three-strand weave"],
+       "extra": {"hardware": "none visible"}
+     },
+     "photos": [{"file": "01-front.jpg", "angle": "front three-quarter", "background": "grey wall", "lighting": "window light", "issues": "slight glare on the arm"}],
+     "preservation_checklist": ["curved arm profile", "woven paper-cord seat, three-strand pattern", "four tapered legs", "tag on rear left leg"],
+     "compliance_cues": ["no health claims"],
+     "people": {"identifiable": false, "consent": "not_applicable"},
+     "research_leads": ["\"Nordlys\" lounge chair NL-204", "https://..."],
+     "direction": {"summary": "calm Scandinavian studio set", "deliverables": ["1 catalog 1:1", "1 lifestyle 4:5"], "constraints": ["no plants"]}
+   }
    ```
 
-   The preservation checklist is used later by QA, so make it concrete. For concept jobs, write what the brief says the subject must be.
+   - `visual.extra` takes any category-specific observation (neckline, screen bezel, label layout, facade material ...), so the same shape works for every kind of subject.
+   - `identity` is a hypothesis with a confidence, not a fact. `null` for what you can't tell.
+   - `facts_needed.keys` uses the snake_case keys from `prompts/research-extract.md`.
+   - `people.consent`: `confirmed` only if the brief or the user says so; `not_confirmed` blocks the job at the metadata stage.
+   - The preservation checklist is checked item by item in QA, so make it concrete. For concept jobs, write what the brief says the subject must be.
 
-6. Check progress:
+6. **Validate it.**
+   ```bash
+   uv run scripts/studio.py intake <path>
+   ```
+   This checks the schema plus the rules a schema can't express (`exact`/`likeness` needs photos and a checklist; every file under `photos` must be a real subject photo), then writes the readable view `intake.md`. Fix every error it lists and re-run. Act on its `warnings` (undescribed photos, missing consent, no fact keys).
+
+7. Check progress:
    ```bash
    uv run scripts/studio.py status <path>
    ```
-   (`intake.md` existing counts as intake done.)
 
 ## Notes
 
-- Visible text and observations are *hints*, not verified facts. Only the fact-check stage produces facts.
+- Visible text and observations are *hints*, not verified facts. Only the fact-check stage produces facts. In the product metadata they appear as `inferred`.
+- `intake.json` is the source of truth; `intake.md` is generated from it. To change the intake later, edit the JSON and re-run `studio.py intake` (the metadata then needs rebuilding — `status` tells you).
 - Tell the user about photo quality problems (low res, harsh glare, cropped subject) now, since every generation inherits them.
 - Files in `refs/` are style references, never the subject.

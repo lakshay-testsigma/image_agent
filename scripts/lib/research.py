@@ -7,7 +7,6 @@ extraction into research/facts.draft.json. No model is called from these scripts
 """
 from __future__ import annotations
 
-import json
 import re
 
 from . import paths, sources
@@ -110,8 +109,7 @@ def merge(prod: Product) -> dict:
 
 
 def load_input(path) -> dict:
-    try:
-        return json.loads(paths.p(path).read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        die(f"{path} is not valid JSON: {e}")
-    return {}
+    data = paths.read_json(paths.p(path))
+    if data is None:
+        die(f"extraction file not found: {path}")
+    return data

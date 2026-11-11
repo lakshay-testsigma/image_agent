@@ -1,5 +1,5 @@
 ---
-description: Stage 4 — shot plan and image prompts, any genre, industry or medium
+description: Stage 5 — shot plan and image prompts, any genre, industry or medium
 ---
 
 Load the `product-creative` skill with the skill tool and follow it exactly.

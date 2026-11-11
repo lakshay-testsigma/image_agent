@@ -12,6 +12,7 @@ All generated work for that product lives in output/<product-id>/. Originals are
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -69,7 +70,14 @@ def list_images(folder: Path) -> list[Path]:
 def read_json(path: Path, default=None):
     if not path.exists():
         return default
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        die(f"{rel(path)} is not valid JSON: {e}")
+
+
+def sha256_file(path: Path) -> str | None:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
 
 def write_json(path: Path, data) -> None:
@@ -188,6 +196,19 @@ def strip_comments(text: str) -> str:
 
 def brief_text(prod: Product) -> str:
     return prod.brief.read_text(encoding="utf-8") if prod.brief else ""
+
+
+def approved_copy(text: str) -> set[str]:
+    """Phrases the brief's "Approved copy" section allows on images: each line (bullet and quotes removed)
+    and each quoted phrase, lower-cased with whitespace collapsed. Drawn copy must equal one of them."""
+    items: set[str] = set()
+    for line in brief_section(text, "Approved copy").splitlines():
+        line = re.sub(r"[“”″]", '"', line)
+        line = re.sub(r"\s+", " ", re.sub(r"^\s*(?:[-*+]|\d+[.)])\s*", "", line)).strip().lower()
+        if line:
+            items.add(line.strip('"').strip())
+            items.update(q.strip() for q in re.findall(r'"([^"]+)"', line))
+    return items - {""}
 
 
 def brief_section(text: str, heading: str) -> str:

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Design system files",
+  "description": "global = design/global.json (required). layer = assets/<job>/design.json (optional, per product) and output/<id>/design/session.json (optional, session direction). resolved = output/<id>/design/design.resolved.json, written by `studio.py design`.",
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "hex": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"},
+    "text_list": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "theme": {"$ref": "#/$defs/text"},
+        "medium": {"$ref": "#/$defs/text"},
+        "palette": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {"type": "array", "items": {"$ref": "#/$defs/hex"}},
+            "secondary": {"type": "array", "items": {"$ref": "#/$defs/hex"}},
+            "accent": {"type": "array", "items": {"$ref": "#/$defs/hex"}},
+            "background": {"$ref": "#/$defs/hex"},
+            "notes": {"$ref": "#/$defs/text"}
+          }
+        },
+        "typography": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "headline_font": {"$ref": "#/$defs/text"},
+            "body_font": {"$ref": "#/$defs/text"},
+            "color": {"$ref": "#/$defs/hex"},
+            "notes": {"$ref": "#/$defs/text"}
+          }
+        },
+        "lighting": {"$ref": "#/$defs/text"},
+        "shadows": {"$ref": "#/$defs/text"},
+        "photographic_style": {"$ref": "#/$defs/text"},
+        "background": {"$ref": "#/$defs/text"},
+        "environment": {"$ref": "#/$defs/text"},
+        "composition": {"$ref": "#/$defs/text"},
+        "camera": {"$ref": "#/$defs/text"},
+        "product_positioning": {"$ref": "#/$defs/text"},
+        "props": {"$ref": "#/$defs/text"},
+        "people": {"$ref": "#/$defs/text"},
+        "mood": {"$ref": "#/$defs/text"},
+        "branding": {"$ref": "#/$defs/text"},
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "aspect": {"type": "string", "pattern": "^\\d+(\\.\\d+)?:\\d+(\\.\\d+)?$"},
+            "width": {"type": "integer", "minimum": 16},
+            "height": {"type": "integer", "minimum": 16},
+            "format": {"enum": ["png", "jpg", "webp"]},
+            "transparent_background": {"type": "boolean"}
+          }
+        },
+        "extra": {"type": "object", "additionalProperties": {"$ref": "#/$defs/text"}}
+      }
+    },
+
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+        "variations": {"type": "integer", "minimum": 1, "maximum": 8}
+      }
+    },
+
+    "mockup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "type": {"$ref": "#/$defs/text"},
+        "purpose": {"$ref": "#/$defs/text"},
+        "notes": {"$ref": "#/$defs/text"},
+        "variations": {"type": "integer", "minimum": 1, "maximum": 8},
+        "style": {"$ref": "#/$defs/style"},
+        "must_avoid": {"$ref": "#/$defs/text_list"}
+      }
+    },
+
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "style", "identity_constraints"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "version": {"type": ["string", "integer"]},
+        "description": {"type": "string"},
+        "style": {"allOf": [{"$ref": "#/$defs/style"}, {"required": ["theme", "output"]}]},
+        "generation": {"$ref": "#/$defs/generation"},
+        "must_avoid": {"$ref": "#/$defs/text_list"},
+        "identity_constraints": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
+        "locked": {"type": "array", "items": {"type": "string", "pattern": "^(mockups|(style|generation)(\\.[a-z_]+)+)$"}},
+        "mockups": {"type": "array", "items": {"$ref": "#/$defs/mockup"}}
+      }
+    },
+
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {"type": "string"},
+        "style": {"$ref": "#/$defs/style"},
+        "generation": {"$ref": "#/$defs/generation"},
+        "must_avoid": {"$ref": "#/$defs/text_list"},
+        "identity_constraints": {"$ref": "#/$defs/text_list"},
+        "mockups": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mockup"}}
+      }
+    },
+
+    "resolved_mockup": {
+      "type": "object",
+      "required": ["name", "type", "variations", "style", "must_avoid"],
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "type": {"$ref": "#/$defs/text"},
+        "variations": {"type": "integer", "minimum": 1},
+        "style": {"allOf": [{"$ref": "#/$defs/style"}, {"required": ["theme", "output"]}]},
+        "must_avoid": {"$ref": "#/$defs/text_list"}
+      }
+    },
+
+    "resolved": {
+      "type": "object",
+      "required": ["name", "layers", "style", "generation", "must_avoid", "identity_constraints", "locked", "mockups", "resolution_log", "warnings"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "layers": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["layer", "file", "present", "sha256"],
+            "properties": {
+              "layer": {"enum": ["global", "product", "session"]},
+              "file": {"type": "string"},
+              "present": {"type": "boolean"},
+              "sha256": {"type": ["string", "null"]}
+            }
+          }
+        },
+        "style": {"allOf": [{"$ref": "#/$defs/style"}, {"required": ["theme", "output"]}]},
+        "generation": {"allOf": [{"$ref": "#/$defs/generation"}, {"required": ["max_attempts", "variations"]}]},
+        "must_avoid": {"$ref": "#/$defs/text_list"},
+        "identity_constraints": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
+        "locked": {"type": "array", "items": {"type": "string"}},
+        "mockups": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/resolved_mockup"}},
+        "resolution_log": {"type": "array"},
+        "warnings": {"type": "array"}
+      }
+    }
+  }
+}

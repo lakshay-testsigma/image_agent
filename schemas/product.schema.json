@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Product metadata — the one file image generation is allowed to read facts and design from",
+  "description": "Written by `studio.py metadata` to output/<id>/metadata/product.json. Works for any subject category: category-specific values live in `attributes` (free keys) and `visual.extra`.",
+  "type": "object",
+  "required": ["schema_version", "product_id", "generated_at", "identification", "reference_images", "attributes",
+               "research", "visual", "generation_constraints", "design", "inputs_sha256", "warnings"],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "text_list": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "identity_field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "status"],
+      "properties": {
+        "value": {"type": ["string", "number", "null"]},
+        "status": {"enum": ["verified", "inferred", "unknown"]}
+      }
+    },
+    "source_ref": {
+      "type": "object",
+      "required": ["source_id", "tier"],
+      "properties": {
+        "source_id": {"$ref": "#/$defs/text"},
+        "tier": {"enum": ["client", "manufacturer", "gs1", "distributor", "retailer", "other"]},
+        "url": {"type": ["string", "null"]},
+        "quote": {"type": ["string", "null"]}
+      }
+    },
+    "fact": {
+      "type": "object",
+      "required": ["key", "value", "status", "basis", "sources"],
+      "properties": {
+        "key": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "label": {"type": ["string", "null"]},
+        "variant": {"type": ["string", "null"]},
+        "value": {"type": ["string", "number", "boolean", "array"]},
+        "unit": {"type": ["string", "null"]},
+        "status": {"enum": ["verified", "needs_review"]},
+        "basis": {"$ref": "#/$defs/text"},
+        "sources": {"type": "array", "items": {"$ref": "#/$defs/source_ref"}}
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "product_id": {"$ref": "#/$defs/text"},
+    "generated_at": {"$ref": "#/$defs/text"},
+    "identification": {
+      "type": "object",
+      "required": ["subject_type", "category", "name", "brand", "model", "confidence"],
+      "properties": {
+        "subject_type": {"$ref": "#/$defs/text"},
+        "category": {"$ref": "#/$defs/text"},
+        "industry": {"type": ["string", "null"]},
+        "name": {"$ref": "#/$defs/identity_field"},
+        "brand": {"$ref": "#/$defs/identity_field"},
+        "model": {"$ref": "#/$defs/identity_field"},
+        "identifiers": {"type": "object"},
+        "confidence": {"enum": ["high", "medium", "low", "unknown"]},
+        "basis": {"type": ["string", "null"]}
+      }
+    },
+    "reference_images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "role", "sha256", "width", "height"],
+        "properties": {
+          "file": {"$ref": "#/$defs/text"},
+          "role": {"enum": ["primary", "subject", "style_ref"]},
+          "sha256": {"$ref": "#/$defs/text"},
+          "width": {"type": "integer", "minimum": 1},
+          "height": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified", "unverified", "conflicting", "rejected", "inferred", "unavailable"],
+      "properties": {
+        "verified": {"type": "array", "items": {"allOf": [{"$ref": "#/$defs/fact"}, {"properties": {"status": {"const": "verified"}}}]}},
+        "unverified": {"type": "array", "items": {"allOf": [{"$ref": "#/$defs/fact"}, {"properties": {"status": {"const": "needs_review"}}}]}},
+        "conflicting": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "candidates"],
+            "properties": {
+              "key": {"$ref": "#/$defs/text"},
+              "variant": {"type": ["string", "null"]},
+              "candidates": {"type": "array", "minItems": 2}
+            }
+          }
+        },
+        "rejected": {
+          "type": "array",
+          "items": {"type": "object", "required": ["key", "reason"], "properties": {"key": {"$ref": "#/$defs/text"}, "reason": {"$ref": "#/$defs/text"}}}
+        },
+        "inferred": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "value", "basis"],
+            "properties": {"key": {"$ref": "#/$defs/text"}, "basis": {"$ref": "#/$defs/text"}}
+          }
+        },
+        "unavailable": {"$ref": "#/$defs/text_list"}
+      }
+    },
+    "research": {
+      "type": "object",
+      "required": ["status", "sources"],
+      "properties": {
+        "status": {"enum": ["done", "skipped"]},
+        "reason": {"type": ["string", "null"]},
+        "sources": {
+          "type": "array",
+          "items": {"type": "object", "required": ["id", "tier", "sha256"], "properties": {"id": {"$ref": "#/$defs/text"}}}
+        },
+        "verification": {"type": ["object", "null"]}
+      }
+    },
+    "visual": {"type": "object"},
+    "generation_constraints": {
+      "type": "object",
+      "required": ["fidelity", "preservation_checklist", "identity_constraints", "must_avoid", "text_policy"],
+      "properties": {
+        "fidelity": {"enum": ["exact", "likeness", "inspired", "none"]},
+        "preservation_checklist": {"$ref": "#/$defs/text_list"},
+        "identity_constraints": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/text"}},
+        "must_avoid": {"$ref": "#/$defs/text_list"},
+        "compliance_cues": {"$ref": "#/$defs/text_list"},
+        "text_policy": {"$ref": "#/$defs/text"}
+      }
+    },
+    "design": {"$ref": "design.schema.json#/$defs/resolved"},
+    "inputs_sha256": {"type": "object", "required": ["intake", "design_resolved"]},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}

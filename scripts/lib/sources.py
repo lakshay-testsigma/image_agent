@@ -5,8 +5,8 @@ Source tiers (most → least authoritative):
   manufacturer  official brand page, manual, spec sheet
   gs1           GS1 / Verified by GS1 barcode registry
   distributor   authorised distributor listing
-  retailer      other retailers (supplementary only)
-  other         anything else (reviews, forums) — never enough on its own
+  retailer      other retailers (supplementary: two agreeing distributor/retailer domains can verify)
+  other         anything else (reviews, forums) — never verifies a fact, however many agree
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from .paths import Product, die
 
 TIERS = ["client", "manufacturer", "gs1", "distributor", "retailer", "other"]
 AUTHORITATIVE = {"client", "manufacturer", "gs1"}
+CORROBORATING = {"distributor", "retailer"}  # two of these on different domains can verify a fact together
 UA = "Mozilla/5.0 (compatible; ProductStudioResearch/0.1)"
 
 

@@ -3,7 +3,7 @@
 The render stage passes the subject photos (if any) and other references to your harness's image tool, together with your prompt file. Image models work best with plain, concrete language in roughly this order.
 
 ## 1. Say what each image is for
-Images are attached in the order `studio.py refs` prints: the primary subject photo, the other subject photos, then extra `--ref` files, then `refs/` (if `--with-style-refs`).
+Images are attached in the order `studio.py preflight` prints: the primary subject photo, the other subject photos, then extra `--ref` files, then `refs/` (if `--with-style-refs`).
 
 > Images 1–3 show the exact product: a solid white-oak lounge chair with a woven paper-cord seat. Image 4 is a mood reference — borrow only its warm late-afternoon light and muted palette, not its objects.
 
@@ -24,7 +24,7 @@ Images are attached in the order `studio.py refs` prints: the primary subject ph
 
 **none:** no subject reference. Describe the subject fully and concretely.
 
-In every mode, list the 3–6 most fragile details from the intake checklist. Concrete details hold up better than general reminders.
+In every mode, list the 3–6 most fragile details from the preservation checklist, and carry the design's `identity_constraints` (in `product.json`) into the contract. Concrete details hold up better than general reminders.
 
 ## 3. Medium and style first
 State the medium up front if it isn't a photo: "Flat vector illustration, limited 4-colour palette, subtle grain", "Isometric 3D render, soft clay materials", "35 mm film photograph, Portra 400 grain", "Anime key visual, cel-shaded". With `exact` fidelity in a stylised medium, keep the subject photographic inside the stylised world or plan a composite.
@@ -39,12 +39,12 @@ State the medium up front if it isn't a photo: "Flat vector illustration, limite
 ## 5. Scale from verified facts
 > The chair is 85 cm tall with a 45 cm seat height. A 30 cm ceramic vase stands beside it for scale.
 
-Only use `verified` values here.
+Only use values from `attributes.verified` in `product.json` here. `inferred` values describe what the photos show (colour, material, shape) and can be used to describe the subject, not to state measurements or claims.
 
 ## 6. Avoid list
 > No extra products, no duplicates, no people, no visible brand names other than the subject's own label, no watermarks, no warped geometry, no extra fingers.
 
-Add the brief's "Must avoid" and the industry's compliance cues from [genres.md](genres.md).
+Use the mockup's resolved `must_avoid` (global + product + session), plus the brief's "Must avoid" and the industry's compliance cues from [genres.md](genres.md).
 
 ## 7. Text policy
 > Do not add any text, numbers, captions or logos to the image. The only lettering allowed is the subject's existing printed label, reproduced exactly.
@@ -59,7 +59,7 @@ Headlines, specs, prices, disclaimers, logos and UI screenshots go on later thro
 - Text-to-image without subject references only for `none`/`inspired` jobs, background plates or abstract concepts. It doesn't preserve the subject.
 
 ## Iterating
-- Change one thing per retry and note what changed in the shot plan.
+- Change one thing per retry and note what changed in the shot plan. Retries are limited per mockup (`max_attempts` in the design); spend them deliberately.
 - If a label, logo or face keeps drifting, attach only the clearest photo (`--only-primary`), make that detail smaller or angled, or plan a composite.
 - If colours shift, name the exact colour ("deep forest green, approx #1F3D2B, matte") and reduce coloured light.
 - Keep prompts under roughly 250 words. Past that, extra detail starts to compete with itself.

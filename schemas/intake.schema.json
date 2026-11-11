@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Intake — what the agent saw in the subject photos and read in the brief",
+  "description": "Written by the agent to output/<id>/intake.json, validated by `studio.py intake`. Everything here is an observation or a hypothesis, never a verified fact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["subject", "fidelity", "facts_needed", "identity", "visual", "preservation_checklist", "people"],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "text_list": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+  },
+  "properties": {
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "category"],
+      "properties": {
+        "type": {"$ref": "#/$defs/text"},
+        "category": {"$ref": "#/$defs/text"},
+        "industry": {"$ref": "#/$defs/text"},
+        "playbooks": {"$ref": "#/$defs/text_list"}
+      }
+    },
+    "fidelity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "source"],
+      "properties": {
+        "mode": {"enum": ["exact", "likeness", "inspired", "none"]},
+        "source": {"enum": ["brief", "user", "assumed"]}
+      }
+    },
+    "facts_needed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["needed"],
+      "properties": {
+        "needed": {"type": "boolean"},
+        "keys": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9_]+$"}},
+        "reason": {"type": "string"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confidence"],
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "brand": {"type": ["string", "null"]},
+        "model": {"type": ["string", "null"]},
+        "identifiers": {"type": "object", "additionalProperties": {"$ref": "#/$defs/text"}},
+        "confidence": {"enum": ["high", "medium", "low", "unknown"]},
+        "basis": {"type": "string"}
+      }
+    },
+    "visible_text": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {"text": {"$ref": "#/$defs/text"}, "location": {"type": "string"}}
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shape": {"$ref": "#/$defs/text"},
+        "construction": {"$ref": "#/$defs/text"},
+        "materials": {"$ref": "#/$defs/text_list"},
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": {"$ref": "#/$defs/text"},
+              "hex": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+              "where": {"type": "string"}
+            }
+          }
+        },
+        "finish": {"$ref": "#/$defs/text"},
+        "parts": {"$ref": "#/$defs/text_list"},
+        "distinguishing_features": {"$ref": "#/$defs/text_list"},
+        "extra": {"type": "object", "additionalProperties": {"$ref": "#/$defs/text"}}
+      }
+    },
+    "photos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file"],
+        "properties": {
+          "file": {"$ref": "#/$defs/text"},
+          "angle": {"type": "string"},
+          "background": {"type": "string"},
+          "lighting": {"type": "string"},
+          "issues": {"type": "string"}
+        }
+      }
+    },
+    "preservation_checklist": {"$ref": "#/$defs/text_list"},
+    "compliance_cues": {"$ref": "#/$defs/text_list"},
+    "people": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifiable", "consent"],
+      "properties": {
+        "identifiable": {"type": "boolean"},
+        "consent": {"enum": ["confirmed", "not_confirmed", "not_applicable"]}
+      }
+    },
+    "research_leads": {"$ref": "#/$defs/text_list"},
+    "direction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {"type": "string"},
+        "deliverables": {"$ref": "#/$defs/text_list"},
+        "constraints": {"$ref": "#/$defs/text_list"}
+      }
+    },
+    "notes": {"type": "string"}
+  }
+}

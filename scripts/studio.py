@@ -64,7 +64,7 @@ def cmd_init(a):
     out({**prod.to_dict(), "client_source": s0["id"] if s0 else None, "warnings": warnings})
 
 
-STAGES = ["init", "intake", "research", "factcheck", "creative", "render", "qa", "export"]
+STAGES = ["init", "intake", "research", "factcheck", "design", "metadata", "creative", "render", "qa", "export"]
 
 
 def cmd_status(a):
@@ -73,17 +73,26 @@ def cmd_status(a):
     st = m["stages"]
     skipped = {k: v.get("reason") for k, v in st.items() if v.get("status") == "skipped"}
     done = {s for s in STAGES if s in st} | ({"render"} if any(k.startswith("render:") for k in st) else set())
+    from lib import design, metadata, renders
+
     w = prod.work
     files = {
-        "intake": w / "intake.md", "sources": w / "sources/index.json", "facts_draft": w / "research/facts.draft.json",
+        "intake": w / "intake.json", "sources": w / "sources/index.json", "facts_draft": w / "research/facts.draft.json",
         "facts_verified": w / "factcheck/facts.verified.json", "factcheck_report": w / "factcheck/report.md",
+        "design_resolved": w / "design/design.resolved.json", "metadata": w / "metadata/product.json",
         "shot_plan": w / "creative/shot-plan.md", "qa": w / "qa/qa.json", "qa_report": w / "qa/qa-report.md",
         "listing": w / "final/listing.json",
     }
-    if (w / "intake.md").exists():
-        done.add("intake")
     if (w / "creative/shot-plan.md").exists():
         done.add("creative")
+    # design and metadata only count as done while they still match their inputs on disk
+    if design.stale_reason(prod):
+        done.discard("design")
+    stale = metadata.stale_reason(prod)
+    if stale:
+        done.discard("metadata")
+    meta = paths.read_json(files["metadata"]) if not stale else None
+    shots = {m["name"]: renders.budget(prod, meta, m["name"]) for m in meta["design"]["mockups"]} if meta else None
     renders = sorted(paths.rel(f) for f in (w / "renders").rglob("*") if f.suffix.lower() in paths.IMAGE_EXTS) if (w / "renders").exists() else []
     nxt = next((s for s in STAGES if s not in done), None)
     out({
@@ -94,8 +103,45 @@ def cmd_status(a):
         "files": {k: paths.rel(v) for k, v in files.items() if v.exists()},
         "renders": renders,
         "factcheck_summary": {k: st["factcheck"].get(k) for k in ("verified", "needs_review", "conflict", "rejected")} if "factcheck" in st else None,
+        "metadata_ready": not stale, "metadata_problem": stale,
+        "mockup_attempts": shots,
         "inputs": prod.to_dict(),
     })
+
+
+def cmd_intake(a):
+    from lib import intake
+
+    prod = paths.resolve(a.product)
+    out(intake.store(prod, paths.p(a.input) if a.input else None))
+
+
+def cmd_design(a):
+    from lib import design
+
+    prod = paths.resolve(a.product)
+    r = design.resolve(prod)
+    out({"file": paths.rel(design.resolved_path(prod)), "design_system": r["name"], "layers": r["layers"],
+         "mockups": [{"name": m["name"], "type": m["type"], "variations": m["variations"], "output": m["style"]["output"]}
+                     for m in r["mockups"]],
+         "generations_planned": sum(m["variations"] for m in r["mockups"]),
+         "max_attempts_per_mockup": r["generation"]["max_attempts"],
+         "overrides_applied": [e for e in r["resolution_log"] if e["applied"]],
+         "overrides_blocked": [e for e in r["resolution_log"] if not e["applied"]],
+         "warnings": r["warnings"], "next": "`studio.py metadata`"})
+
+
+def cmd_metadata(a):
+    from lib import metadata
+
+    prod = paths.resolve(a.product)
+    m = metadata.build(prod)
+    at = m["attributes"]
+    out({"file": paths.rel(metadata.path(prod)), "schema": "schemas/product.schema.json", "valid": True,
+         "identification": m["identification"],
+         "attributes": {k: (v if k == "unavailable" else [f["key"] for f in v]) for k, v in at.items()},
+         "research": m["research"]["status"], "mockups": [x["name"] for x in m["design"]["mockups"]],
+         "warnings": m["warnings"]})
 
 
 def cmd_skip(a):
@@ -165,6 +211,10 @@ def cmd_verify(a):
     res = factcheck.verify(prod, independent=not a.deterministic_only, require=require)
     out({"summary": res["summary"], "missing_required": res["missing_required"],
          "report": paths.rel(prod.work / "factcheck/report.md"), "file": paths.rel(prod.work / "factcheck/facts.verified.json")})
+    if res["missing_required"]:
+        # results are written; the non-zero exit makes sure a missing required fact is never overlooked
+        print(f"error: required fact(s) not verified: {', '.join(res['missing_required'])}", file=sys.stderr)
+        sys.exit(2)
 
 
 def cmd_override(a):
@@ -199,6 +249,13 @@ def cmd_refs(a):
     refs = _refs(prod, a)
     out({"reference_images": [str(r) for r in refs], "relative": [paths.rel(r) for r in refs],
          "note": "attach in this order; the prompt must say what each image is"})
+
+
+def cmd_preflight(a):
+    from lib import renders
+
+    prod = paths.resolve(a.product)
+    out(renders.preflight(prod, a.shot, _refs(prod, a), a.extra_attempt))
 
 
 def cmd_register(a):
@@ -244,14 +301,21 @@ def cmd_qa_mark(a):
     out(review.qa_mark(prod, paths.p(a.image), {"factual": a.factual, "visual": a.visual, "creative": a.creative}, a.notes or ""))
 
 
+def cmd_qa_set(a):
+    from lib import review
+
+    out(review.qa_set(paths.resolve(a.product), a.consistency, a.notes or ""))
+
+
 def cmd_export(a):
     from lib import review
 
     prod = paths.resolve(a.product)
     desc = paths.p(a.description_file).read_text(encoding="utf-8") if a.description_file else None
-    listing = review.export(prod, [paths.p(i) for i in (a.image or [])], desc, a.force)
-    out({"listing": paths.rel(prod.work / "final/listing.json"), "images": [i["file"] for i in listing["images"]],
-         "excluded_unverified": listing["excluded_unverified"]})
+    listing = review.export(prod, [paths.p(i) for i in (a.image or [])], desc, a.force, a.partial)
+    out({"listing": paths.rel(prod.work / "final/listing.json"), "metadata": listing["metadata"],
+         "images": [i["file"] for i in listing["images"]], "excluded_unverified": listing["excluded_unverified"],
+         "missing_mockups": listing["missing_mockups"], "forced": listing["forced"]})
 
 
 # ── parser ───────────────────────────────────────────────────────────────────
@@ -270,6 +334,16 @@ def main(argv=None):
     s.add_argument("product", help=P)
 
     s = cmd("status", cmd_status, "show what is done for this product and what comes next")
+    s.add_argument("product", help=P)
+
+    s = cmd("intake", cmd_intake, "validate the agent's intake.json against schemas/intake.schema.json and render intake.md")
+    s.add_argument("product", help=P)
+    s.add_argument("--input", help="intake JSON written elsewhere (default: output/<id>/intake.json)")
+
+    s = cmd("design", cmd_design, "resolve global + per-product + session design layers into design.resolved.json")
+    s.add_argument("product", help=P)
+
+    s = cmd("metadata", cmd_metadata, "build and schema-validate metadata/product.json (required before any render)")
     s.add_argument("product", help=P)
 
     s = cmd("skip", cmd_skip, "mark a stage as not needed for this job (e.g. research for a portrait or a concept poster)")
@@ -336,6 +410,12 @@ def main(argv=None):
     s.add_argument("product", help=P)
     ref_flags(s)
 
+    s = cmd("preflight", cmd_preflight, "gate BEFORE generating a shot: metadata current, shot planned, prompt, refs, attempt budget")
+    s.add_argument("product", help=P)
+    s.add_argument("--shot", required=True, help="mockup name from the resolved design")
+    s.add_argument("--extra-attempt", metavar="REASON", help="the user approved one more attempt past the budget; quote them")
+    ref_flags(s)
+
     s = cmd("register", cmd_register, "log images made by the harness image tool into renders/<shot>/ (audit trail)")
     s.add_argument("product", help=P)
     s.add_argument("--shot", required=True, help="shot name, e.g. hero, lifestyle-kitchen, detail-stitching")
@@ -362,18 +442,24 @@ def main(argv=None):
     s.add_argument("images", nargs="*", help="default: all product photos + all renders")
     s.add_argument("--out")
 
-    s = cmd("qa-mark", cmd_qa_mark, "record QA verdicts for one image (approved = all three gates pass)")
+    s = cmd("qa-mark", cmd_qa_mark, "record QA verdicts for one image (approved = three gates pass + deterministic checks)")
     s.add_argument("product", help=P)
     s.add_argument("image")
     for gate in ("factual", "visual", "creative"):
         s.add_argument(f"--{gate}", required=True, choices=["pass", "fail", "na"] if gate == "factual" else ["pass", "fail"])
     s.add_argument("--notes")
 
+    s = cmd("qa-set", cmd_qa_set, "record the set-level verdict: approved images are consistent and usefully different")
+    s.add_argument("product", help=P)
+    s.add_argument("--consistency", required=True, choices=["pass", "fail"])
+    s.add_argument("--notes")
+
     s = cmd("export", cmd_export, "copy approved images to final/ and write listing.json (verified facts only)")
     s.add_argument("product", help=P)
     s.add_argument("--image", action="append", help="default: every image approved in qa.json")
     s.add_argument("--description-file")
-    s.add_argument("--force", action="store_true")
+    s.add_argument("--force", action="store_true", help="export despite QA problems (only when the user asks)")
+    s.add_argument("--partial", action="store_true", help="export although some planned mockups have no approved image")
 
     a = ap.parse_args(argv)
     a.fn(a)

@@ -1,5 +1,5 @@
 ---
-description: Stage 6 — text, logos, perspective composites, channel resizes
+description: Stage 7 — text, logos, perspective composites, channel resizes
 ---
 
 Load the `product-overlay` skill with the skill tool and follow it exactly.

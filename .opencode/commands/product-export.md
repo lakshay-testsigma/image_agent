@@ -1,5 +1,5 @@
 ---
-description: Stage 8 — package approved images + listing.json audit trail
+description: Stage 9 — package approved images + listing.json audit trail
 ---
 
 Load the `product-export` skill with the skill tool and follow it exactly.

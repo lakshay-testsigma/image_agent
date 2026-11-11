@@ -1,0 +1,46 @@
+{
+  "name": "studio-clean",
+  "version": "1",
+  "description": "Example global design system. Copy to design/global.json and make it yours. Every job in the collection is resolved against it; per-product files (assets/<job>/design.json) can override anything not listed in `locked`.",
+  "style": {
+    "theme": "Quiet, premium, editorial. Honest product photography with generous negative space.",
+    "medium": "studio photography",
+    "palette": {
+      "primary": ["#111111", "#F5F2EC"],
+      "accent": ["#C8A27A"],
+      "background": "#F5F2EC",
+      "notes": "Warm neutrals. The subject's own colours are never shifted to fit the palette."
+    },
+    "typography": {"headline_font": "Helvetica", "body_font": "Helvetica", "color": "#111111"},
+    "lighting": "Large soft key light from camera left, gentle fill, no hard specular hotspots.",
+    "shadows": "Soft contact shadow directly under the subject; no long cast shadows.",
+    "photographic_style": "Clean catalogue realism, true colours, shallow grade.",
+    "background": "Seamless warm off-white sweep.",
+    "composition": "Subject centred or on a third, fully in frame, at least 12% margin on every side.",
+    "camera": "Eye-level three-quarter view, 50-85 mm look, f/5.6, everything on the subject sharp.",
+    "product_positioning": "Upright, front face readable, sitting naturally on the surface.",
+    "props": "None unless a mockup asks for them; never more than two.",
+    "mood": "Calm, confident, uncluttered.",
+    "branding": "No added logos or text in generated images; branding is composited with overlays.",
+    "output": {"aspect": "1:1", "width": 2048, "height": 2048, "format": "png"}
+  },
+  "generation": {"max_attempts": 3, "variations": 2},
+  "must_avoid": ["watermarks", "extra products", "competitor brands", "generated text or numbers"],
+  "identity_constraints": [
+    "Never change the subject's shape, proportions, part count or construction.",
+    "Never change the subject's colours, materials, finish or surface pattern.",
+    "Never alter, move, redraw or invent logos, labels or printed text on the subject.",
+    "Never show a feature, accessory, variant or certification the real subject does not have.",
+    "Scale must agree with verified dimensions when the scene gives a size cue."
+  ],
+  "locked": ["style.palette", "style.typography", "style.branding", "generation.max_attempts"],
+  "mockups": [
+    {"name": "catalog", "type": "catalog", "purpose": "honest main image", "variations": 1},
+    {
+      "name": "lifestyle",
+      "type": "lifestyle",
+      "purpose": "the subject in use, in context",
+      "style": {"background": "A real, lightly styled environment that suits the subject.", "output": {"aspect": "4:5", "width": 1080, "height": 1350}}
+    }
+  ]
+}

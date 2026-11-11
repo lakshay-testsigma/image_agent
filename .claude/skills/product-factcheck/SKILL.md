@@ -31,13 +31,17 @@ Give it exactly this brief (fill in the paths):
 ```bash
 uv run scripts/studio.py verify <path> --require height,width,depth,material
 ```
-Build `--require` from the brief's "Facts to verify / show" (plus anything the user named), using the snake_case keys from the draft. `verify` refuses to run if any claim lacks a verdict, or if the draft changed after `--prepare`.
+Build `--require` from the brief's "Facts to verify / show" and `facts_needed.keys` in `intake.json` (plus anything the user named), using the snake_case keys from the draft. `verify` refuses to run if any claim lacks a verdict, or if the draft changed after `--prepare`.
+
+**Exit code 2** means the report was written but a required fact is not verified. That is a checkpoint, not a crash: go to step 5.
 
 Per claim: a `supported` verdict counts only if the checker's own evidence quote is found in the source. Per fact (key + variant) across sources:
-- `verified`: claims agree, and either an authoritative source (client / manufacturer / gs1) supports it or 2+ independent domains agree
-- `needs_review`: only one secondary source
-- `conflict`: sources disagree and there's no client value
+- `verified`: claims agree, and either an authoritative source (client / manufacturer / gs1) supports it, or 2+ distributor/retailer sources on different web domains agree
+- `needs_review`: weaker support — one secondary source, two pages of the same domain, sources without a URL, or only `other`-tier sources (reviews, forums, sources whose product match is `unclear`) however many
+- `conflict`: sources disagree and no single strongest-tier value settles it
 - `rejected`: nothing survived
+
+Agreement is strict: numbers must match within 2% after unit conversion; text must contain the same words ("oak" vs "oak veneer" is a conflict, "solid white oak" vs "white oak, solid" is not).
 
 `--deterministic-only` skips step 2 (offline dry runs only). Then nothing except client facts gets past `needs_review`.
 
@@ -63,6 +67,8 @@ uv run scripts/studio.py facts <path> --all    # everything
 
 ## 6. Hand-off
 
-Tell the user the counts and the open items in a short table. Downstream stages use only `verified` facts. `needs_review` facts can be mentioned to the user but must not appear on images or listings.
+Tell the user the counts and the open items in a short table. Downstream stages read facts from `metadata/product.json` (built in `product-design`), where only `verified` facts count; `needs_review` facts are listed as `unverified` and can be mentioned to the user but must not appear on images or listings. Required facts with nothing usable are listed as `unavailable`.
+
+Re-running `verify` after the metadata was built makes the metadata stale — rebuild it with `studio.py metadata <path>`.
 
 Checker rules live in `prompts/factcheck-verify.md`; tier/tolerance logic in `scripts/lib/factcheck.py`. Adjust them if a client needs stricter rules.

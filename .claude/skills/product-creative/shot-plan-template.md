@@ -3,18 +3,23 @@
 **Subject & industry:** <e.g. stoneware mug · homeware / founder portrait · B2B SaaS / 2-bed flat · real estate>
 **Fidelity:** exact | likeness | inspired | none
 **Direction in one line:** <the concept that ties the set together>
-**Source of direction:** session / brief / brand profile / proposed by agent (approved by user? y/n)
-**Preservation checklist:** <copy from intake.md — what must stay identical / recognisable>
+**Design system:** <design.name + version> · layers used: global [+ product] [+ session] · blocked overrides: <none | list>
+**Source of direction (inside the design):** session / brief / brand profile / proposed by agent (approved by user? y/n)
+**Identity constraints:** <from product.json generation_constraints — never overridable>
+**Preservation checklist:** <from product.json — what must stay identical / recognisable>
 **Verified facts available for overlays/scale:** <key: value, ... | none (research skipped: reason)>
+**Not usable (unverified / conflicting / unavailable):** <keys | none>
 **Compliance notes:** <from brief + genres.md, e.g. "label virtual staging", "no health claims">
 
 ---
 
-## Shot: <shot-name>   (e.g. catalog-white, lifestyle-loft, story-launch, thumbnail-v1, poster-a3)
+## Shot: <mockup name from design.mockups>   (must match exactly, e.g. catalog, lifestyle, story)
 - **Purpose / channel:** e.g. Amazon main / Instagram 4:5 / YouTube thumbnail / A3 print / website hero
-- **Delivery size:** e.g. 1080×1350 (generate 2:3, then overlay canvas) · variations: 2 · transparent bg: no
+- **Delivery size:** <mockup style.output, e.g. 1080×1350> (generate at the closest aspect, then overlay canvas) · variations: <mockup variations> · transparent bg: no
+- **From the design (binding):** lighting / background / palette / composition / camera as resolved for this mockup
+- **What makes this shot different from the others:** angle / context / crop / use
 - **Medium / style:** e.g. studio photo / 3D render / flat vector / watercolour / anime key visual
-- **References attached:** all subject photos | `--only-primary` | `--with-style-refs` | `--ref assets/<job>/refs/mood.jpg` | `--no-product-refs` (flags for `studio.py refs` / `register`)
+- **References attached:** all subject photos | `--only-primary` | `--with-style-refs` | `--ref assets/<job>/refs/mood.jpg` | `--no-product-refs` (flags for `studio.py preflight` / `register`)
 - **Concept:** one or two sentences
 - **Set / environment:**
 - **Lighting:**

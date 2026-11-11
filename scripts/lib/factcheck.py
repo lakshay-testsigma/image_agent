@@ -16,10 +16,13 @@ Per claim (one fact from one source):
 
 Per fact (key + variant) across sources:
   verified      all surviving claims agree AND (an authoritative source — client / manufacturer /
-                gs1 — supports it, OR >=2 independent domains agree)
-  needs_review  supported by a single secondary source only, or the independent check was skipped
+                gs1 — supports it, OR >=2 distributor/retailer sources on different web domains agree)
+  needs_review  weaker support: a single secondary source, only `other`-tier sources (reviews, forums,
+                sources whose product match is unclear) however many, or the independent check was skipped
   conflict      surviving claims disagree and no client value settles it
   rejected      no claim survived the checks
+Text values agree only when they contain the same words ("oak" and "oak veneer" are a conflict);
+numbers agree within TOLERANCE after unit conversion.
 Human overrides (studio.py override) always win and are marked basis="human override".
 """
 from __future__ import annotations
@@ -196,21 +199,21 @@ def canon(value, unit):
     if n is not None:
         ui = unit_info(unit)
         return (ui[0], n * ui[1]) if ui else ("num:" + norm(unit or ""), n)
-    return ("text", norm(json.dumps(value) if isinstance(value, list) else value))
+    # text: the set of words, so word order and punctuation don't matter but every word does
+    return ("text", frozenset(re.findall(r"[a-z0-9]+", norm(json.dumps(value) if isinstance(value, list) else value))))
 
 
 def same_value(a, b) -> bool:
     if a[0] != b[0]:
         return False
     if a[0] == "text":
-        return a[1] == b[1] or a[1] in b[1] or b[1] in a[1]
+        return a[1] == b[1]
     return abs(a[1] - b[1]) <= TOLERANCE * max(abs(a[1]), abs(b[1]), 1e-9)
 
 
-def domain(url: str | None, sid: str) -> str:
-    if not url:
-        return sid
-    return urllib.parse.urlparse(url).netloc.lower().removeprefix("www.") or sid
+def domain(url: str | None) -> str | None:
+    """Web domain of a source, or None for sources without a URL (local files, pasted text)."""
+    return (urllib.parse.urlparse(url).netloc.lower().removeprefix("www.") or None) if url else None
 
 
 # ── independent check (done by the harness agent) ────────────────────────────
@@ -373,16 +376,23 @@ def verify(prod: Product, independent: bool = True, require: list[str] | None = 
         if len(clusters) > 1:
             conflicts = [_cluster_out(cl, idx) for cl in clusters if cl is not chosen]
         tiers = {eff_tier(c) for c in chosen}
-        domains = {domain(idx[c["source_id"]].get("url"), c["source_id"]) for c in chosen}
         rep = sorted(chosen, key=lambda c: sources.TIERS.index(eff_tier(c)))[0]
+        # corroboration counts distinct web domains of distributor/retailer sources only: `other`-tier
+        # sources and sources without a URL can't vouch for each other
+        domains = sorted({d for c in chosen if eff_tier(c) in sources.CORROBORATING
+                          and (d := domain(idx[c["source_id"]].get("url")))})
         if "client" in tiers:
             status, basis = "verified", "client-approved brief"
         elif not independent:
             status, basis = "needs_review", "independent check skipped (--deterministic-only)"
         elif tiers & sources.AUTHORITATIVE:
-            status, basis = "verified", f"authoritative source ({', '.join(sorted(tiers & sources.AUTHORITATIVE))})"
+            auth = sorted({f"{eff_tier(c)}: {domain(idx[c['source_id']].get('url')) or c['source_id']}"
+                           for c in chosen if eff_tier(c) in sources.AUTHORITATIVE})
+            status, basis = "verified", f"authoritative source ({', '.join(auth)}; tier assigned by the researcher)"
         elif len(domains) >= 2:
-            status, basis = "verified", f"{len(domains)} independent sources agree"
+            status, basis = "verified", f"{len(domains)} independent distributor/retailer sources agree ({', '.join(domains)})"
+        elif tiers <= {"other"}:
+            status, basis = "needs_review", f"only `other`-tier sources ({len(chosen)}) — never enough on their own"
         else:
             status, basis = "needs_review", f"single {eff_tier(rep)} source only"
         if conflicts:
@@ -400,6 +410,7 @@ def verify(prod: Product, independent: bool = True, require: list[str] | None = 
         "checked_by": checker,
         "independent_check": independent,
         "summary": {s: sum(f["status"] == s for f in facts) for s in ("verified", "needs_review", "conflict", "rejected")},
+        "required": list(require or []),
         "missing_required": missing,
         "facts": sorted(facts, key=lambda f: (["verified", "needs_review", "conflict", "rejected"].index(f["status"]), f["key"])),
         "rejected_claims": rejected,

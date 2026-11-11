@@ -4,6 +4,8 @@
 Optional house style shared by many products of one client. Copy to brands/<client>.md and
 reference it from a product brief ("Brand profile: brands/<client>.md").
 The PRODUCT BRIEF ALWAYS WINS over this file when they disagree.
+The visual system that is actually enforced lives in design/global.json (structured, validated, with locks).
+Use this file for what a schema can't hold: voice, audience, taste, things to know about the client.
 -->
 
 ## Identity

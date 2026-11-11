@@ -9,7 +9,9 @@ HOW TO USE
    generated from this brief (+ refs/).
 3. Optional: put mood boards, style references, a model/face reference, fonts or the client logo in refs/.
    Files in refs/ are NEVER treated as the subject — only as inspiration or assets to place.
-4. Fill in whatever you know below. Everything is optional. Write naturally — no rigid format needed.
+4. Optional: edit design.json to give THIS subject its own look or shot list on top of the global design
+   system (design/global.json). Delete design.json to use the global design unchanged.
+5. Fill in whatever you know below. Everything is optional. Write naturally — no rigid format needed.
 -->
 
 ## Subject
@@ -21,7 +23,8 @@ HOW TO USE
 - Variants (sizes / colours / editions):
 - Official URL(s):
 - Other URLs worth checking:
-- Brand profile: <!-- optional, e.g. brands/acme.md — house style shared by many jobs -->
+- Brand profile: <!-- optional, e.g. brands/acme.md — voice and audience shared by many jobs -->
+- Design system: <!-- optional, e.g. design/winter-collection.json. Empty = design/global.json (which must exist) -->
 
 ## Fidelity
 <!--
@@ -76,8 +79,9 @@ If empty, the agent proposes a set and asks you before generating.
 
 ## Approved copy (text allowed on images)
 <!--
-Only text written here (plus verified facts) may be drawn on images, word for word: headlines, taglines,
-CTAs, prices, disclaimers, legal lines. Leave empty for images with no added text.
+Only text written here (plus verified facts) may be drawn on images: headlines, taglines, CTAs, prices,
+disclaimers, legal lines. One phrase per line (or in "quotes"); a phrase is used whole, never in part.
+Leave empty for images with no added text.
 e.g. "Handcrafted in Portugal"
 -->
 

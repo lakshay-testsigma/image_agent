@@ -1,0 +1,6 @@
+{
+  "description": "OPTIONAL per-product design. Delete this file to use the global design system unchanged. Only fields listed here override design/global.json; fields the global file locks are ignored (and reported). `must_avoid` and `identity_constraints` are added to the global lists, never replace them. `mockups` replaces the global mockup list for this product.",
+  "style": {},
+  "must_avoid": [],
+  "identity_constraints": []
+}
